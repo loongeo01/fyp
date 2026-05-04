@@ -196,133 +196,183 @@ class _IngredientPricesState extends State<IngredientPrices> {
     return "OTHER";
   }
 
-  // --- HELPER: MAPBOX MATRIX API ---
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF8FAF8),
       appBar: AppBar(
-        title: Text(
-          "Prices",
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: const Text(
+          "Nearby Results",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+            letterSpacing: -0.5,
+          ),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        centerTitle: true,
+        centerTitle: false,
       ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // --- STITCH: FLOATING SEARCH & LOCATION UI ---
           Padding(
-            padding: EdgeInsetsGeometry.all(10),
-            child: IngredientSearchBar(
-              onPlus: (test) {},
-              onSearchChanged: (value) {
-                setState(() {
-                  widget.ingredientName = value;
-                });
-                _fetchStorePricesFromFirebase();
-              },
-              hintText: "Enter ingredient here",
-              defaultText: widget.ingredientName,
-              havePlusButton: false,
-            ),
-          ),
-
-          // --- THE NEW DROPDOWN UI ---
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedLocation,
-                isExpanded: true,
-                icon: const Icon(
-                  Icons.keyboard_arrow_down,
-                  color: Colors.green,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Column(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: IngredientSearchBar(
+                    onPlus: (test) {},
+                    onSearchChanged: (value) {
+                      setState(() {
+                        widget.ingredientName = value;
+                      });
+                      _fetchStorePricesFromFirebase();
+                    },
+                    hintText: "Search ingredients...",
+                    defaultText: widget.ingredientName,
+                    havePlusButton: false,
+                  ),
                 ),
-                items: _locationOptions.map((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(
-                      value == 'My Location'
-                          ? '📍 My Current Location'
-                          : '🏙️ $value',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
+                const SizedBox(height: 16),
+                // Modern Location Pill
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 2,
+                      ), // Tighter vertical padding for Dropdown
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedLocation,
+                          icon: const Padding(
+                            padding: EdgeInsets.only(left: 4.0),
+                            child: Icon(
+                              Icons.keyboard_arrow_down,
+                              color: Color(0xFF006E1C),
+                              size: 18,
+                            ),
+                          ),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: Color(0xFF191C1B),
+                          ),
+                          items: _locationOptions.map((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    value == 'My Location'
+                                        ? Icons.my_location
+                                        : Icons.location_city,
+                                    color: const Color(0xFF006E1C),
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(value),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (newValue) {
+                            if (newValue != null &&
+                                newValue != _selectedLocation) {
+                              setState(() {
+                                _selectedLocation = newValue;
+                                _isLoading =
+                                    true; // Show the spinner while searching
+                              });
+                              // Re-run the Firebase query with the new location
+                              _fetchStorePricesFromFirebase();
+                            }
+                          },
+                        ),
                       ),
                     ),
-                  );
-                }).toList(),
-                onChanged: (newValue) {
-                  if (newValue != null && newValue != _selectedLocation) {
-                    setState(() {
-                      _selectedLocation = newValue;
-                      _isLoading = true; // Show the spinner again
-                    });
-                    // Re-run the database query with the new location!
-                    _fetchStorePricesFromFirebase();
-                  }
-                },
-              ),
+                  ],
+                ),
+              ],
             ),
           ),
 
-          // A subtle divider line
-          Divider(height: 1, color: Colors.grey[300]),
+          const SizedBox(height: 8),
 
-          // --- THE EXISTING STORE LIST ---
+          // --- STITCH: PREMIUM RESULT CARDS ---
           Expanded(
             child: _isLoading && widget.ingredientName != ""
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(color: Colors.green),
-                        const SizedBox(height: 16),
-                        Text(
-                          _statusMessage,
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF006E1C)),
                   )
                 : _nearbyStores.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      "No stores found in this area.",
-                      style: TextStyle(color: Colors.red),
+                      "No stores found.",
+                      style: TextStyle(color: Colors.grey[500], fontSize: 16),
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
                     itemCount: _nearbyStores.length,
                     itemBuilder: (context, index) {
-                      // ... (Keep your exact Card and ListTile code here) ...
                       final store = _nearbyStores[index];
                       bool isCheapest = index == 0;
 
-                      return Card(
-                        elevation: isCheapest ? 4 : 1,
+                      return Container(
                         margin: const EdgeInsets.only(bottom: 16),
-                        shape: RoundedRectangleBorder(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
-                          side: isCheapest
-                              ? BorderSide(
-                                  color: Colors.green.shade300,
-                                  width: 2,
+                          border: isCheapest
+                              ? Border.all(
+                                  color: const Color(
+                                    0xFF006E1C,
+                                  ).withOpacity(0.3),
+                                  width: 1.5,
                                 )
-                              : BorderSide.none,
+                              : Border.all(
+                                  color: Colors.grey.shade100,
+                                  width: 1.0,
+                                ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF142814).withOpacity(0.04),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
                         ),
-                        child: ListTile(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => StoreMapScreen(
                                   storeName: store["name"],
-                                  // Make sure these match the keys in your store data!
                                   targetLat: store["lat"],
                                   targetLng: store["lng"],
                                   userLat: _userPosition!.latitude,
@@ -332,50 +382,97 @@ class _IngredientPricesState extends State<IngredientPrices> {
                               ),
                             );
                           },
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
-                          ),
-                          leading: CircleAvatar(
-                            backgroundColor: isCheapest
-                                ? Colors.green[100]
-                                : Colors.grey[200],
-                            child: Icon(
-                              Icons.storefront,
-                              color: isCheapest
-                                  ? Colors.green[700]
-                                  : Colors.grey[600],
-                            ),
-                          ),
-                          title: Text(
-                            store["name"],
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          subtitle: Row(
-                            children: [
-                              const Icon(
-                                Icons.location_on,
-                                size: 14,
-                                color: Colors.grey,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                "${store["distance_km"].toStringAsFixed(1)} km away",
-                                style: TextStyle(color: Colors.grey[600]),
-                              ),
-                            ],
-                          ),
-                          trailing: Text(
-                            "RM ${store["price"].toStringAsFixed(2)}",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: isCheapest
-                                  ? Colors.green[700]
-                                  : Colors.black87,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Row(
+                              children: [
+                                // Placeholder for Store Image
+                                Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    Icons.storefront,
+                                    color: Colors.grey[400],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              store["name"],
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 16,
+                                                color: Color(0xFF191C1B),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          Text(
+                                            "RM ${store["price"].toStringAsFixed(2)}",
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 18,
+                                              color: Color(0xFF006E1C),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.map_outlined,
+                                            size: 14,
+                                            color: Color(0xFF6F7A6B),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            "${store["distance_km"].toStringAsFixed(1)} km",
+                                            style: const TextStyle(
+                                              color: Color(0xFF6F7A6B),
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          const Padding(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                            ),
+                                            child: CircleAvatar(
+                                              radius: 2,
+                                              backgroundColor: Colors.grey,
+                                            ),
+                                          ),
+                                          Text(
+                                            isCheapest
+                                                ? "In Stock"
+                                                : "Low Stock",
+                                            style: TextStyle(
+                                              color: isCheapest
+                                                  ? const Color(0xFF006E1C)
+                                                  : Colors.orange,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),

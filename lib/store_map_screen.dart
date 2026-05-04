@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
-import 'package:flutter/services.dart'; // For rootBundle
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
@@ -14,7 +14,6 @@ class StoreMapScreen extends StatefulWidget {
   final double targetLng;
   final double userLat;
   final double userLng;
-  // --- ADDED: This connects the data from your list to the map ---
   final List<Map<String, dynamic>> nearbyStores;
 
   const StoreMapScreen({
@@ -38,15 +37,12 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
 
   Future<void> _onMapCreated(mapbox.MapboxMap mapboxMap) async {
     this.mapboxMap = mapboxMap;
-
     annotationManager = await mapboxMap.annotations
         .createPointAnnotationManager();
     polylineAnnotationManager = await mapboxMap.annotations
         .createPolylineAnnotationManager();
 
-    // --- CRITICAL: You must call the listener setup here! ---
     _setupPinTapListener();
-
     _addGroceryStorePins();
   }
 
@@ -73,10 +69,7 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
           image: list,
           iconSize: 0.2,
           iconOffset: [0.0, -10.0],
-          // --- THE GHOST TEXT TRICK ---
-          // We keep the name so the Bottom Sheet can read it...
           textField: store['name'],
-          // ...but set size to 0 so it stays invisible on the map!
           textSize: 0.0,
         ),
       );
@@ -88,43 +81,218 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
       onTap: (mapbox.PointAnnotation clickedPin) {
         showModalBottomSheet(
           context: context,
+          backgroundColor: Colors.white,
+          isScrollControlled: true, // Allows the sheet to be taller
           shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(32),
+            ), // Stitch curve
           ),
           builder: (context) {
             return Container(
-              padding: const EdgeInsets.all(24),
-              height: 220,
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+              height: 380, // Taller to fit the Stitch Grid
               width: double.infinity,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    // Now this will correctly show the store name!
-                    clickedPin.textField ?? "Selected Store",
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
+                  // --- STITCH: DRAG HANDLE ---
+                  Center(
+                    child: Container(
+                      width: 48,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "Best prices for your ingredients found here.",
-                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                  const SizedBox(height: 24),
+
+                  // --- STITCH: HEADER ROW ---
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFF4CAF50,
+                                ).withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Text(
+                                "Nearest Store",
+                                style: TextStyle(
+                                  color: Color(0xFF006E1C),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              clickedPin.textField ?? "Selected Store",
+                              style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.5,
+                                color: Color(0xFF191C1B),
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              "Best prices found here",
+                              style: TextStyle(
+                                color: Color(0xFF6F7A6B),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Mock Rating Block to match UI
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.star, color: Colors.orange, size: 20),
+                              SizedBox(width: 4),
+                              Text(
+                                "4.9",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            "120+ reviews",
+                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // --- STITCH: DETAILS GRID ---
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.schedule,
+                                color: Color(0xFF006E1C),
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const [
+                                  Text(
+                                    "Open until",
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  Text(
+                                    "10:00 PM",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.eco, color: Color(0xFF006E1C)),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const [
+                                  Text(
+                                    "Inventory",
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  Text(
+                                    "In Stock",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const Spacer(),
+
+                  // --- STITCH: ACTION BUTTON ---
                   SizedBox(
                     width: double.infinity,
-                    child: ElevatedButton(
+                    height: 56,
+                    child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.green,
+                        backgroundColor: const Color(0xFF006E1C),
+                        elevation: 4,
+                        shadowColor: const Color(0xFF006E1C).withOpacity(0.4),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(
+                            28,
+                          ), // Fully rounded
+                        ),
+                      ),
+                      icon: const Icon(Icons.near_me, color: Colors.white),
+                      label: const Text(
+                        "Navigate Here",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       onPressed: () {
-                        // Use the coordinates of the specific pin tapped
                         final lat = clickedPin.geometry.coordinates.lat
                             .toDouble();
                         final lng = clickedPin.geometry.coordinates.lng
@@ -132,10 +300,6 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
                         _drawRouteToStore(lat, lng);
                         Navigator.pop(context);
                       },
-                      child: const Text(
-                        "Navigate Here",
-                        style: TextStyle(color: Colors.white),
-                      ),
                     ),
                   ),
                 ],
@@ -148,10 +312,8 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
   }
 
   Future<void> _drawRouteToStore(double destLat, double destLng) async {
-    // 1. Use the coordinates we passed from the price list screen!
     double userLat = widget.userLat;
     double userLng = widget.userLng;
-
     final String accessToken = token!;
 
     final url =
@@ -163,14 +325,12 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
         final data = json.decode(response.body);
         final List coordinates = data['routes'][0]['geometry']['coordinates'];
 
-        // Apply prefixes to Position
         List<mapbox.Position> routePoints = coordinates.map((coord) {
           return mapbox.Position(coord[0], coord[1]);
         }).toList();
 
         await polylineAnnotationManager?.deleteAll();
 
-        // Apply prefixes to PolylineAnnotationOptions and LineString
         var polylineOptions = mapbox.PolylineAnnotationOptions(
           geometry: mapbox.LineString(coordinates: routePoints),
           lineColor: Colors.blue.value,
@@ -180,7 +340,6 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
 
         polylineAnnotationManager?.create(polylineOptions);
 
-        // Auto-zoom to show the whole route
         mapboxMap?.setCamera(
           mapbox.CameraOptions(
             padding: mapbox.MbxEdgeInsets(
@@ -200,33 +359,27 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // A Stack allows us to put the map on the bottom, and UI on top
       body: Stack(
         children: [
-          // --- LAYER 1: THE FULL SCREEN MAP ---
           MapWidget(
             key: const ValueKey("mapWidget"),
             onMapCreated: _onMapCreated,
             cameraOptions: CameraOptions(
-              // Start the camera over Petaling Jaya
               center: Point(
                 coordinates: Position(widget.targetLng, widget.targetLat),
               ),
               zoom: 13.0,
             ),
-            styleUri: MapboxStyles.MAPBOX_STREETS, // The default map style
+            styleUri: MapboxStyles.MAPBOX_STREETS,
           ),
-
-          // --- LAYER 2: FLOATING UI ---
-          // A floating back button in the top left corner
           Positioned(
-            top: 50, // Pushes it down below the phone's status bar
+            top: 50,
             left: 20,
             child: CircleAvatar(
               backgroundColor: Colors.white,
               radius: 24,
               child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.black),
+                icon: const Icon(Icons.arrow_back, color: Color(0xFF191C1B)),
                 onPressed: () => Navigator.pop(context),
               ),
             ),

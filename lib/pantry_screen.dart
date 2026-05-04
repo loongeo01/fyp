@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:recipe_app/ingredient_prices.dart';
 import 'package:recipe_app/pantry_recipes_screen.dart';
-import 'package:recipe_app/searchBar.dart'; // Make sure this path is correct
+import 'package:recipe_app/searchBar.dart';
 import 'pantry_provider.dart';
 
 class PantryScreen extends StatelessWidget {
@@ -10,56 +10,74 @@ class PantryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // We watch BOTH lists to handle our empty states perfectly
     final rawIngredients = context.watch<PantryProvider>().savedIngredients;
     final displayList = context.watch<PantryProvider>().filteredIngredients;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF8FAF8),
       appBar: AppBar(
         title: const Text(
           'My Pantry',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF006E1C),
+            fontSize: 22,
+            letterSpacing: -0.5,
+          ),
         ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
+        centerTitle: false,
+        backgroundColor: Colors.white.withOpacity(0.8),
         elevation: 0,
+        scrolledUnderElevation: 0,
       ),
       body: Column(
         children: [
-          // --- 1. THE SEARCH BAR (ALWAYS VISIBLE) ---
+          // --- 1. THE SEARCH BAR ---
           Padding(
-            padding: const EdgeInsets.all(20),
-            child: IngredientSearchBar(
-              hintText: "Search/Enter for ingredients...",
-              onPlus: (String selection) {
-                // Add it to the physical pantry list
-                context.read<PantryProvider>().addIngredient(selection);
-
-                // Clear the search query so they instantly see their newly added item
-                context.read<PantryProvider>().updateSearch("");
-              },
-              onSearchChanged: (String typedText) {
-                // Trigger the live filtering!
-                context.read<PantryProvider>().updateSearch(typedText);
-              },
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: IngredientSearchBar(
+                hintText: "Search or add ingredients...",
+                onPlus: (String selection) {
+                  context.read<PantryProvider>().addIngredient(selection);
+                  context.read<PantryProvider>().updateSearch("");
+                },
+                onSearchChanged: (String typedText) {
+                  context.read<PantryProvider>().updateSearch(typedText);
+                },
+              ),
             ),
           ),
 
           // --- 2. THE DYNAMIC CONTENT AREA ---
           Expanded(
-            // Scenario A: The user has absolutely nothing in their pantry yet
             child: rawIngredients.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.kitchen, size: 80, color: Colors.grey[300]),
+                        Icon(
+                          Icons.inventory_2_outlined,
+                          size: 80,
+                          color: Colors.grey[300],
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           "Your pantry is empty!",
                           style: TextStyle(
                             fontSize: 20,
+                            fontWeight: FontWeight.bold,
                             color: Colors.grey[600],
                           ),
                         ),
@@ -68,11 +86,9 @@ class PantryScreen extends StatelessWidget {
                           "Type an ingredient above to add it.",
                           style: TextStyle(color: Colors.grey[500]),
                         ),
-                        const SizedBox(height: 60),
                       ],
                     ),
                   )
-                // Scenario B: They have items, but their search didn't match anything
                 : displayList.isEmpty
                 ? Center(
                     child: Text(
@@ -80,179 +96,273 @@ class PantryScreen extends StatelessWidget {
                       style: TextStyle(fontSize: 16, color: Colors.grey[500]),
                     ),
                   )
-                // Scenario C: Show the beautiful, filterable list!
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                // --- STITCH: 2-COLUMN PANTRY GRID ---
+                : GridView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio:
+                          0.75, // Adjusts height to fit image + text + buttons
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                    ),
                     itemCount: displayList.length,
                     itemBuilder: (context, index) {
-                      // --- NEW: Extracting from the MapEntry ---
                       final entry = displayList[index];
                       final String itemName = entry.key;
                       final int itemQuantity = entry.value;
 
                       return Dismissible(
-                        key: Key(itemName), // Use the extracted key
-                        direction: DismissDirection.endToStart,
+                        key: Key(itemName),
+                        direction: DismissDirection.horizontal,
                         background: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20),
-                          margin: const EdgeInsets.only(bottom: 12),
                           decoration: BoxDecoration(
                             color: Colors.redAccent,
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          child: const Icon(Icons.delete, color: Colors.white),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.white,
+                            size: 32,
+                          ),
                         ),
                         onDismissed: (direction) {
                           context.read<PantryProvider>().removeIngredient(
                             itemName,
                           );
-
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text("$itemName removed from pantry"),
                               duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
                             ),
                           );
                         },
-                        child: Card(
-                          elevation: 2,
-                          margin: const EdgeInsets.only(bottom: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: ListTile(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => IngredientPrices(
-                                    ingredientName: itemName.toString(),
-                                  ),
-                                ),
-                              );
-                            },
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 8,
-                            ),
-                            leading: CircleAvatar(
-                              backgroundColor: Theme.of(
-                                context,
-                              ).colorScheme.primaryContainer,
-                              child: Icon(
-                                Icons.eco,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                            title: Text(
-                              itemName, // Use the extracted name here
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            // --- THE NEW QUANTITY CONTROLS ---
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize
-                                  .min, // Prevents row from taking over the whole card
-                              children: [
-                                // Minus Button
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.remove_circle_outline,
-                                    color: Colors.redAccent,
-                                  ),
-                                  onPressed: () {
-                                    context
-                                        .read<PantryProvider>()
-                                        .updateQuantity(itemName, -1);
-                                  },
-                                ),
-
-                                // The Number
-                                SizedBox(
-                                  width:
-                                      24, // Keeps the number centered perfectly
-                                  child: Text(
-                                    itemQuantity.toString(),
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-
-                                // Plus Button
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.add_circle_outline,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                  ),
-                                  onPressed: () {
-                                    context
-                                        .read<PantryProvider>()
-                                        .updateQuantity(itemName, 1);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                        child: _buildGridCard(context, itemName, itemQuantity),
                       );
                     },
                   ),
           ),
+        ],
+      ),
 
-          // --- THE NEW "GENERATE RECIPES" BUTTON ---
-          // Only show the button if the pantry is NOT empty
-          if (rawIngredients.isNotEmpty)
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 56, // Makes the button nice and tall for thumbs!
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.auto_awesome, color: Colors.white),
-                    label: const Text(
-                      "Find Matching Recipes",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green[600],
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 4,
-                    ),
-                    onPressed: () {
-                      // Grab just the ingredient names from the Provider
-                      List<String> myIngredients = rawIngredients
-                          .map((e) => e.key)
-                          .toList();
+      // --- STITCH: NEW CIRCULAR FLOATING ACTION BUTTON ---
+      floatingActionButton: rawIngredients.isNotEmpty
+          ? FloatingActionButton(
+              backgroundColor: const Color(0xFF006E1C),
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  20,
+                ), // Slightly rounded square look
+              ),
+              child: const Icon(Icons.menu_book, color: Colors.white, size: 28),
+              onPressed: () {
+                List<String> myIngredients = rawIngredients
+                    .map((e) => e.key)
+                    .toList();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        PantryRecipesScreen(userIngredients: myIngredients),
+                  ),
+                );
+              },
+            )
+          : null,
+    );
+  }
 
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => PantryRecipesScreen(
-                            userIngredients: myIngredients,
-                          ),
+  // --- HELPER: BUILD THE INDIVIDUAL SQUARE CARD ---
+  Widget _buildGridCard(
+    BuildContext context,
+    String itemName,
+    int itemQuantity,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF142814).withOpacity(0.04),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    IngredientPrices(ingredientName: itemName),
+              ),
+            );
+          },
+          child: Stack(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // --- TOP 50%: IMAGE AREA ---
+                  Expanded(
+                    flex: 5,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(16),
                         ),
-                      );
-                    },
+                      ),
+                      child: Icon(
+                        Icons.eco,
+                        size: 48,
+                        color: Colors.grey.shade300,
+                      ),
+                    ),
+                  ),
+
+                  // --- BOTTOM 50%: TEXT & BUTTONS ---
+                  Expanded(
+                    flex: 5,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+                      child: Column(
+                        children: [
+                          Text(
+                            itemName,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF191C1B),
+                              height: 1.2,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              // --- TOP RIGHT BADGE (UPGRADED) ---
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ), // Increased padding
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF006E1C),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    "${itemQuantity}x",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14, // Increased from 10 to 14
+                      fontWeight: FontWeight.w800, // Extra bold
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
               ),
+
+              // --- TACTILE STEPPER AT BOTTOM (SIMPLIFIED) ---
+              Positioned(
+                bottom: 8,
+                left: 12,
+                right: 12,
+                child: Container(
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF2F4F2), // Light grey pill
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Physical Minus Button
+                      _buildTactileButton(
+                        icon: Icons.remove,
+                        onTap: () => context
+                            .read<PantryProvider>()
+                            .updateQuantity(itemName, -1),
+                      ),
+
+                      // Subtle vertical divider for a premium look
+                      Container(
+                        width: 1,
+                        height: 16,
+                        color: Colors.grey.shade300,
+                      ),
+
+                      // Physical Plus Button
+                      _buildTactileButton(
+                        icon: Icons.add,
+                        onTap: () => context
+                            .read<PantryProvider>()
+                            .updateQuantity(itemName, 1),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- HELPER: PHYSICAL BUTTON STYLE ---
+  Widget _buildTactileButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        margin: const EdgeInsets.all(
+          1.5,
+        ), // Gives it a "nested" look inside the pill
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
             ),
-        ],
+          ],
+        ),
+        child: Icon(icon, size: 18, color: const Color(0xFF006E1C)),
       ),
     );
   }
