@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "658191778895",
+    "firebase_url": "https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "ai-pantry-my-86ad3",
+    "storage_bucket": "ai-pantry-my-86ad3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:658191778895:android:ce4ab2ad0618c42b17d63a",
+        "android_client_info": {
+          "package_name": "com.example.recipe_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzZAR9FwfPrmNnbwkYSU4ao65St-0vzgA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
