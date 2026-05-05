@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:recipe_app/app_images.dart';
 import 'package:recipe_app/main.dart';
 import 'pantry_provider.dart';
 
@@ -187,17 +188,15 @@ class PantryRecipesScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // --- IMAGE PLACEHOLDER ---
-                Container(
-                  width: 90,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(
-                    Icons.restaurant,
-                    color: Color(0xFFBECAB9),
-                    size: 32,
+                // --- IMAGE AREA (WITH FIREBASE FALLBACK) ---
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    // <-- CHANGED THIS
+                    AppImages.getRecipeImage(recipe["name"] ?? ""),
+                    width: 90,
+                    height: 100,
+                    fit: BoxFit.cover,
                   ),
                 ),
                 const SizedBox(width: 16),

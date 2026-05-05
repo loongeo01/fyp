@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:recipe_app/app_images.dart';
 import 'package:recipe_app/ingredient_prices.dart';
 import 'package:recipe_app/pantry_screen.dart';
 import 'package:recipe_app/searchBar.dart';
@@ -21,6 +22,7 @@ import 'pantry_provider.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
@@ -789,10 +791,16 @@ class RecipeCard extends StatelessWidget {
                     color: Colors.grey[100],
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    Icons.restaurant,
-                    color: Colors.grey[400],
-                    size: 32,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(
+                      16,
+                    ), // Adjust this number for more/less rounding
+                    child: Image.asset(
+                      AppImages.getRecipeImage(recipe["name"] ?? ""),
+                      width: 90,
+                      height: 100,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -952,10 +960,11 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
         await userRef.set({
           'favorites': FieldValue.arrayUnion([_recipeName]),
         }, SetOptions(merge: true));
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Saved to Favorites! ❤️")),
           );
+        }
       } else {
         await userRef.set({
           'favorites': FieldValue.arrayRemove([_recipeName]),
@@ -993,17 +1002,26 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                SizedBox(
-                  width: double.infinity,
-                  height: 360,
-                  // Placeholder: Replace with a real NetworkImage or Asset later!
-                  child: Container(
-                    color: Colors.grey[300],
-                    child: const Icon(
-                      Icons.restaurant,
-                      size: 100,
-                      color: Colors.white,
+                CachedNetworkImage(
+                  imageUrl:
+                      widget.recipe["image_url"] ??
+                      AppImages.getRecipeImage(_recipeName),
+                  fit: BoxFit.cover,
+
+                  // Shows a subtle loading spinner while it downloads the first time
+                  placeholder: (context, url) => Container(
+                    color: Colors.grey.shade100,
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF006E1C),
+                      ),
                     ),
+                  ),
+
+                  // If the Firebase link breaks, show an error icon instead of crashing
+                  errorWidget: (context, url, error) => Container(
+                    color: Colors.grey.shade100,
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
                   ),
                 ),
                 // Frosted Back Button

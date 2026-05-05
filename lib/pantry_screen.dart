@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:recipe_app/app_images.dart';
 import 'package:recipe_app/ingredient_prices.dart';
 import 'package:recipe_app/pantry_recipes_screen.dart';
 import 'package:recipe_app/searchBar.dart';
@@ -217,17 +218,15 @@ class PantryScreen extends StatelessWidget {
                   // --- TOP 50%: IMAGE AREA ---
                   Expanded(
                     flex: 5,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(16),
-                        ),
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(16),
                       ),
-                      child: Icon(
-                        Icons.eco,
-                        size: 48,
-                        color: Colors.grey.shade300,
+                      child: Image.asset(
+                        // <-- CHANGED THIS
+                        AppImages.getIngredientImage(itemName),
+                        fit: BoxFit.cover,
+                        width: double.infinity,
                       ),
                     ),
                   ),

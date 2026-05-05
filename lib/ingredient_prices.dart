@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:recipe_app/app_images.dart';
 import 'package:recipe_app/searchBar.dart';
 import 'package:recipe_app/store_map_screen.dart'; // THE MISSING PIECE!
 
@@ -386,17 +387,21 @@ class _IngredientPricesState extends State<IngredientPrices> {
                             padding: const EdgeInsets.all(16.0),
                             child: Row(
                               children: [
-                                // Placeholder for Store Image
-                                Container(
-                                  width: 60,
-                                  height: 60,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[100],
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    Icons.storefront,
-                                    color: Colors.grey[400],
+                                // --- UPGRADED: STORE BRAND LOGO ---
+                                SizedBox(
+                                  width:
+                                      90, // Made wider for rectangular logos like Lotus's
+                                  height:
+                                      40, // Shorter height so it doesn't take up too much vertical space
+                                  child: Align(
+                                    alignment: Alignment
+                                        .centerLeft, // Aligns the logo to the left edge
+                                    child: Image(
+                                      image: AppImages.getStoreImageProvider(
+                                        store["brand"] ?? "Store",
+                                      ),
+                                      fit: BoxFit.contain,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -407,19 +412,8 @@ class _IngredientPricesState extends State<IngredientPrices> {
                                     children: [
                                       Row(
                                         mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
+                                            MainAxisAlignment.end,
                                         children: [
-                                          Expanded(
-                                            child: Text(
-                                              store["name"],
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                                fontSize: 16,
-                                                color: Color(0xFF191C1B),
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
                                           Text(
                                             "RM ${store["price"].toStringAsFixed(2)}",
                                             style: const TextStyle(
@@ -432,6 +426,8 @@ class _IngredientPricesState extends State<IngredientPrices> {
                                       ),
                                       const SizedBox(height: 8),
                                       Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
                                         children: [
                                           const Icon(
                                             Icons.map_outlined,
