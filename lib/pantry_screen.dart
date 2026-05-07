@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:recipe_app/app_images.dart';
@@ -99,9 +100,12 @@ class PantryScreen extends StatelessWidget {
                   )
                 // --- STITCH: 2-COLUMN PANTRY GRID ---
                 : GridView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 8,
+                    padding: const EdgeInsets.only(
+                      top: 16, // Keep your existing top/left/right padding
+                      left: 20,
+                      right: 20,
+                      bottom:
+                          100, // <-- THE FIX: Adds 100 pixels of empty scroll space at the bottom!
                     ),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
@@ -222,11 +226,47 @@ class PantryScreen extends StatelessWidget {
                       borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(16),
                       ),
-                      child: Image.asset(
-                        // <-- CHANGED THIS
-                        AppImages.getIngredientImage(itemName),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
+                      // 1. LOOKUP THE URL USING 'itemName'
+                      child: Builder(
+                        builder: (context) {
+                          String? imageUrl = context
+                              .read<PantryProvider>()
+                              .getImageUrl(itemName);
+
+                          // 2. SHOW FIREBASE IMAGE OR FALLBACK TO LOCAL
+                          if (imageUrl != null && imageUrl.isNotEmpty) {
+                            return CachedNetworkImage(
+                              imageUrl: imageUrl,
+                              fit: BoxFit.fitHeight,
+                              width: double.infinity,
+                              placeholder: (context, url) => Container(
+                                color: Colors.grey.shade100,
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFF006E1C),
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) => Image.asset(
+                                AppImages.getIngredientImage(itemName),
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                              ),
+                            );
+                          } else {
+                            // If it's a completely custom item not in Firebase
+                            return Image.asset(
+                              AppImages.getIngredientImage(itemName),
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                            );
+                          }
+                        },
                       ),
                     ),
                   ),
@@ -242,7 +282,7 @@ class PantryScreen extends StatelessWidget {
                             itemName,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
-                              fontSize: 14,
+                              fontSize: 17,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF191C1B),
                               height: 1.2,

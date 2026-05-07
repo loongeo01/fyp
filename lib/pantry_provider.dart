@@ -9,7 +9,8 @@ class PantryProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _allRecipes = [];
   bool _hasFetchedRecipes = false;
 
-  // NEW: A loading state so the UI knows we are fetching from Firebase
+  List<Map<String, dynamic>> _masterIngredients = [];
+
   bool _isLoading = true;
 
   // --- THE CONSTRUCTOR ---
@@ -17,12 +18,16 @@ class PantryProvider extends ChangeNotifier {
   PantryProvider() {
     _loadPantryFromFirebase();
     _fetchAllRecipesOnce();
+    loadMasterIngredients();
   }
 
   // 2. The Getters
   List<MapEntry<String, int>> get savedIngredients =>
       _savedIngredients.entries.toList();
   bool get isLoading => _isLoading;
+  List<Map<String, dynamic>> get allRecipes => _allRecipes;
+
+  List<Map<String, dynamic>> get masterIngredients => _masterIngredients;
 
   List<MapEntry<String, int>> get filteredIngredients {
     if (_searchQuery.trim().isEmpty) {
@@ -33,10 +38,29 @@ class PantryProvider extends ChangeNotifier {
     }).toList();
   }
 
-  List<Map<String, dynamic>> get allRecipes => _allRecipes;
   bool get hasFetchedRecipes => _hasFetchedRecipes;
 
   // --- NEW: FIREBASE SYNC METHODS ---
+
+  Future<void> loadMasterIngredients() async {
+    try {
+      // Access the collection created by your Python script
+      QuerySnapshot snapshot = await FirebaseFirestore.instance
+          .collection('master_ingredients')
+          .get();
+
+      _masterIngredients = snapshot.docs.map((doc) {
+        return doc.data() as Map<String, dynamic>;
+      }).toList();
+
+      print(
+        "✅ Loaded ${_masterIngredients.length} master ingredients from Firebase",
+      );
+      notifyListeners();
+    } catch (e) {
+      print("❌ Error loading master ingredients: $e");
+    }
+  }
 
   Future<void> _fetchAllRecipesOnce() async {
     if (_hasFetchedRecipes) return; // Never download twice!
@@ -149,5 +173,21 @@ class PantryProvider extends ChangeNotifier {
     _searchQuery = query;
     notifyListeners();
     // We do NOT sync here, because search text doesn't need to be saved to the database.
+  }
+
+  // --- NEW: IMAGE LOOKUP HELPER ---
+  String? getImageUrl(String ingredientName) {
+    try {
+      // Find the item in the master list that matches the name
+      final match = _masterIngredients.firstWhere(
+        (item) =>
+            item['name'].toString().toUpperCase() ==
+            ingredientName.toUpperCase(),
+      );
+      return match['image_url']?.toString();
+    } catch (e) {
+      // If it's not in the master list (or StateError is thrown), return null
+      return null;
+    }
   }
 }

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
-import 'package:flutter/services.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
 import 'package:recipe_app/config/env.dart';
 
-final token = Env.mapboxToken;
+// --- ADD THIS TO YOUR ENV FILE ---
+final googleApiKey = Env.googleApiKey;
 
 class StoreMapScreen extends StatefulWidget {
   final String storeName;
@@ -31,26 +30,32 @@ class StoreMapScreen extends StatefulWidget {
 }
 
 class _StoreMapScreenState extends State<StoreMapScreen> {
-  mapbox.MapboxMap? mapboxMap;
-  mapbox.PointAnnotationManager? annotationManager;
-  mapbox.PolylineAnnotationManager? polylineAnnotationManager;
+  GoogleMapController? _mapController;
+  Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
+  BitmapDescriptor? _customMarkerIcon;
 
-  Future<void> _onMapCreated(mapbox.MapboxMap mapboxMap) async {
-    this.mapboxMap = mapboxMap;
-    annotationManager = await mapboxMap.annotations
-        .createPointAnnotationManager();
-    polylineAnnotationManager = await mapboxMap.annotations
-        .createPolylineAnnotationManager();
+  @override
+  void initState() {
+    super.initState();
+    _loadCustomMarker();
+  }
 
-    _setupPinTapListener();
+  Future<void> _loadCustomMarker() async {
+    // Converts your existing marker.png to a Google Maps compatible icon
+    _customMarkerIcon = await BitmapDescriptor.asset(
+      const ImageConfiguration(size: Size(48, 48)),
+      'assets/marker.png',
+    );
     _addGroceryStorePins();
   }
 
-  Future<void> _addGroceryStorePins() async {
-    final ByteData bytes = await rootBundle.load('assets/marker.png');
-    final Uint8List list = bytes.buffer.asUint8List();
+  void _onMapCreated(GoogleMapController controller) {
+    _mapController = controller;
+  }
 
-    await annotationManager?.deleteAll();
+  void _addGroceryStorePins() {
+    Set<Marker> newMarkers = {};
     List<String> usedCoords = [];
 
     for (var store in widget.nearbyStores) {
@@ -58,302 +63,346 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
       double lng = (store['lng'] as num).toDouble();
       String coordKey = "${lat.toStringAsFixed(4)},${lng.toStringAsFixed(4)}";
 
+      // Slightly shift overlapping pins (kept exactly from your original logic)
       if (usedCoords.contains(coordKey)) {
         lat += 0.00015;
       }
       usedCoords.add(coordKey);
 
-      annotationManager?.create(
-        mapbox.PointAnnotationOptions(
-          geometry: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
-          image: list,
-          iconSize: 0.2,
-          iconOffset: [0.0, -10.0],
-          textField: store['name'],
-          textSize: 0.0,
+      newMarkers.add(
+        Marker(
+          markerId: MarkerId(store['name'] + lat.toString()),
+          position: LatLng(lat, lng),
+          icon:
+              _customMarkerIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          onTap: () => _showStoreBottomSheet(store, lat, lng),
         ),
       );
     }
+
+    setState(() {
+      _markers = newMarkers;
+    });
   }
 
-  void _setupPinTapListener() {
-    annotationManager?.tapEvents(
-      onTap: (mapbox.PointAnnotation clickedPin) {
-        showModalBottomSheet(
-          context: context,
-          backgroundColor: Colors.white,
-          isScrollControlled: true, // Allows the sheet to be taller
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(32),
-            ), // Stitch curve
-          ),
-          builder: (context) {
-            return Container(
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-              height: 380, // Taller to fit the Stitch Grid
-              width: double.infinity,
-              child: Column(
+  // --- YOUR EXACT ORIGINAL BOTTOM SHEET UI ---
+  void _showStoreBottomSheet(
+    Map<String, dynamic> store,
+    double storeLat,
+    double storeLng,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+          height: 380,
+          width: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // --- STITCH: DRAG HANDLE ---
+              Center(
+                child: Container(
+                  width: 48,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // --- STITCH: HEADER ROW ---
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // --- STITCH: DRAG HANDLE ---
-                  Center(
-                    child: Container(
-                      width: 48,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4CAF50).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            "Nearest Store",
+                            style: TextStyle(
+                              color: Color(0xFF006E1C),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          store['name'], // Replaced Mapbox's clickedPin.textField with your store name
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.5,
+                            color: Color(0xFF191C1B),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          "Best prices found here",
+                          style: TextStyle(
+                            color: Color(0xFF6F7A6B),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-
-                  // --- STITCH: HEADER ROW ---
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  // Mock Rating Block to match UI
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF4CAF50,
-                                ).withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Text(
-                                "Nearest Store",
-                                style: TextStyle(
-                                  color: Color(0xFF006E1C),
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
-                              ),
+                      Row(
+                        children: const [
+                          Icon(Icons.star, color: Colors.orange, size: 20),
+                          SizedBox(width: 4),
+                          Text(
+                            "4.9",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              clickedPin.textField ?? "Selected Store",
-                              style: const TextStyle(
-                                fontSize: 26,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: -0.5,
-                                color: Color(0xFF191C1B),
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              "Best prices found here",
-                              style: TextStyle(
-                                color: Color(0xFF6F7A6B),
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Mock Rating Block to match UI
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Row(
-                            children: const [
-                              Icon(Icons.star, color: Colors.orange, size: 20),
-                              SizedBox(width: 4),
-                              Text(
-                                "4.9",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          const Text(
-                            "120+ reviews",
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // --- STITCH: DETAILS GRID ---
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.schedule,
-                                color: Color(0xFF006E1C),
-                              ),
-                              const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: const [
-                                  Text(
-                                    "Open until",
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  Text(
-                                    "10:00 PM",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.eco, color: Color(0xFF006E1C)),
-                              const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: const [
-                                  Text(
-                                    "Inventory",
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  Text(
-                                    "In Stock",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        "120+ reviews",
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
                       ),
                     ],
                   ),
-                  const Spacer(),
+                ],
+              ),
+              const SizedBox(height: 24),
 
-                  // --- STITCH: ACTION BUTTON ---
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF006E1C),
-                        elevation: 4,
-                        shadowColor: const Color(0xFF006E1C).withOpacity(0.4),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(
-                            28,
-                          ), // Fully rounded
-                        ),
+              // --- STITCH: DETAILS GRID ---
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      icon: const Icon(Icons.near_me, color: Colors.white),
-                      label: const Text(
-                        "Navigate Here",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.schedule, color: Color(0xFF006E1C)),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                "Open until",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              Text(
+                                "10:00 PM",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      onPressed: () {
-                        final lat = clickedPin.geometry.coordinates.lat
-                            .toDouble();
-                        final lng = clickedPin.geometry.coordinates.lng
-                            .toDouble();
-                        _drawRouteToStore(lat, lng);
-                        Navigator.pop(context);
-                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.eco, color: Color(0xFF006E1C)),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                "Inventory",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              Text(
+                                "In Stock",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
-            );
-          },
+              const Spacer(),
+
+              // --- STITCH: ACTION BUTTON ---
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF006E1C),
+                    elevation: 4,
+                    shadowColor: const Color(0xFF006E1C).withOpacity(0.4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  icon: const Icon(Icons.near_me, color: Colors.white),
+                  label: const Text(
+                    "Navigate Here",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onPressed: () {
+                    _drawRouteToStore(storeLat, storeLng);
+                    Navigator.pop(context);
+                  },
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
+  // --- REBUILT FOR GOOGLE DIRECTIONS API ---
   Future<void> _drawRouteToStore(double destLat, double destLng) async {
     double userLat = widget.userLat;
     double userLng = widget.userLng;
-    final String accessToken = token!;
 
+    // Calls the Google Directions API instead of Mapbox
     final url =
-        'https://api.mapbox.com/directions/v5/mapbox/driving/$userLng,$userLat;$destLng,$destLat?geometries=geojson&access_token=$accessToken';
+        'https://maps.googleapis.com/maps/api/directions/json?origin=$userLat,$userLng&destination=$destLat,$destLng&key=$googleApiKey';
 
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final List coordinates = data['routes'][0]['geometry']['coordinates'];
 
-        List<mapbox.Position> routePoints = coordinates.map((coord) {
-          return mapbox.Position(coord[0], coord[1]);
-        }).toList();
+        if (data['routes'].isNotEmpty) {
+          String encodedPolyline =
+              data['routes'][0]['overview_polyline']['points'];
+          List<LatLng> routePoints = _decodePolyline(encodedPolyline);
 
-        await polylineAnnotationManager?.deleteAll();
+          setState(() {
+            _polylines.clear();
+            _polylines.add(
+              Polyline(
+                polylineId: const PolylineId('route'),
+                points: routePoints,
+                color: Colors.blue,
+                width: 5,
+              ),
+            );
+          });
 
-        var polylineOptions = mapbox.PolylineAnnotationOptions(
-          geometry: mapbox.LineString(coordinates: routePoints),
-          lineColor: Colors.blue.value,
-          lineWidth: 5.0,
-          lineOpacity: 0.8,
-        );
-
-        polylineAnnotationManager?.create(polylineOptions);
-
-        mapboxMap?.setCamera(
-          mapbox.CameraOptions(
-            padding: mapbox.MbxEdgeInsets(
-              top: 100,
-              left: 100,
-              bottom: 100,
-              right: 100,
+          // Zoom out to show the whole route
+          _mapController?.animateCamera(
+            CameraUpdate.newLatLngBounds(
+              _boundsFromLatLngList(routePoints),
+              50.0, // padding
             ),
-          ),
-        );
+          );
+        }
       }
     } catch (e) {
       print("Routing Error: $e");
     }
+  }
+
+  // Helper method to decode Google's weird polyline string into map coordinates
+  List<LatLng> _decodePolyline(String encoded) {
+    List<LatLng> poly = [];
+    int index = 0, len = encoded.length;
+    int lat = 0, lng = 0;
+
+    while (index < len) {
+      int b, shift = 0, result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      poly.add(LatLng((lat / 1E5).toDouble(), (lng / 1E5).toDouble()));
+    }
+    return poly;
+  }
+
+  // Helper to adjust camera to fit the route
+  LatLngBounds _boundsFromLatLngList(List<LatLng> list) {
+    double? x0, x1, y0, y1;
+    for (LatLng latLng in list) {
+      if (x0 == null) {
+        x0 = x1 = latLng.latitude;
+        y0 = y1 = latLng.longitude;
+      } else {
+        if (latLng.latitude > x1!) x1 = latLng.latitude;
+        if (latLng.latitude < x0) x0 = latLng.latitude;
+        if (latLng.longitude > y1!) y1 = latLng.longitude;
+        if (latLng.longitude < y0!) y0 = latLng.longitude;
+      }
+    }
+    return LatLngBounds(
+      northeast: LatLng(x1!, y1!),
+      southwest: LatLng(x0!, y0!),
+    );
   }
 
   @override
@@ -361,17 +410,21 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          MapWidget(
-            key: const ValueKey("mapWidget"),
+          // --- STITCH: GOOGLE MAP INSTEAD OF MAPBOX ---
+          GoogleMap(
             onMapCreated: _onMapCreated,
-            cameraOptions: CameraOptions(
-              center: Point(
-                coordinates: Position(widget.targetLng, widget.targetLat),
-              ),
+            initialCameraPosition: CameraPosition(
+              target: LatLng(widget.targetLat, widget.targetLng),
               zoom: 13.0,
             ),
-            styleUri: MapboxStyles.MAPBOX_STREETS,
+            markers: _markers,
+            polylines: _polylines,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
           ),
+
           Positioned(
             top: 50,
             left: 20,

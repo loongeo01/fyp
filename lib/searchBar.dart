@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:recipe_app/pantry_provider.dart';
 
-// 1. The Widget Class (Only holds final variables passed from the parent)
 class IngredientSearchBar extends StatefulWidget {
   final Function(String) onPlus;
   final Function(String) onSearchChanged;
@@ -21,29 +22,25 @@ class IngredientSearchBar extends StatefulWidget {
   State<IngredientSearchBar> createState() => _IngredientSearchBarState();
 }
 
-// 2. The State Class (Holds your changing variables and the UI)
 class _IngredientSearchBarState extends State<IngredientSearchBar> {
-  static const List<String> _pantryDatabase = [
-    'BAWANG MERAH',
-    'BAWANG PUTIH',
-    'CILI PADI',
-    'CILI MERAH',
-    'AYAM',
-    'DAGING',
-    'TELUR',
-    'KOBIS',
-    'KANGKUNG',
-    'IKAN BILIS',
-  ];
+  // REMOVED: Static _pantryDatabase list is gone!
 
   @override
   Widget build(BuildContext context) {
+    final dynamicSuggestions = context
+        .watch<PantryProvider>()
+        .masterIngredients
+        .map((item) => item['name'].toString())
+        .toList();
+
     return Autocomplete<String>(
+      // NEW: When a user clicks a suggestion from the dropdown
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
           return const Iterable<String>.empty();
         }
-        return _pantryDatabase.where((String option) {
+        // Use the dynamic list passed from the parent!
+        return dynamicSuggestions.where((String option) {
           return option.toLowerCase().contains(
             textEditingValue.text.toLowerCase(),
           );
@@ -51,21 +48,21 @@ class _IngredientSearchBarState extends State<IngredientSearchBar> {
       },
       fieldViewBuilder:
           (context, textEditingController, focusNode, onFieldSubmitted) {
-            textEditingController.text = widget.defaultText;
+            // Only set default text if controller is empty to avoid overwriting typing
+            if (widget.defaultText.isNotEmpty &&
+                textEditingController.text.isEmpty) {
+              textEditingController.text = widget.defaultText;
+            }
 
             return TextField(
               controller: textEditingController,
               focusNode: focusNode,
-              // If they press the "Enter" or "Search" key on their phone keyboard
               onSubmitted: (String value) {
-                // NEW: Shout the word up to the Parent Screen!
                 widget.onSearchChanged(value);
               },
               decoration: InputDecoration(
-                // --- NOTICE THE "widget." PREFIX HERE ---
                 hintText: widget.hintText,
                 prefixIcon: const Icon(Icons.search, color: Colors.green),
-
                 suffixIcon: widget.havePlusButton
                     ? IconButton(
                         icon: const Icon(
@@ -75,7 +72,6 @@ class _IngredientSearchBarState extends State<IngredientSearchBar> {
                         ),
                         onPressed: () {
                           if (textEditingController.text.trim().isNotEmpty) {
-                            // --- AND THE "widget." PREFIX HERE ---
                             widget.onPlus(
                               textEditingController.text.trim().toUpperCase(),
                             );

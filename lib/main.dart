@@ -8,8 +8,6 @@ import 'package:recipe_app/app_images.dart';
 import 'package:recipe_app/ingredient_prices.dart';
 import 'package:recipe_app/pantry_screen.dart';
 import 'package:recipe_app/searchBar.dart';
-import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:image/image.dart' as img;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -24,15 +22,18 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
+import 'dart:convert';
+import 'package:firebase_vertexai/firebase_vertexai.dart';
+
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
-  final token = dotenv.env['MAPBOX_TOKEN'];
+  final token = dotenv.env['googleApiKey'];
 
   if (token == null || token.isEmpty) {
-    throw Exception("MAPBOX_TOKEN not found. Check your .env file.");
+    throw Exception("googleApiKey not found. Check your .env file.");
   }
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -190,10 +191,9 @@ class IngredientScannerScreen extends StatefulWidget {
 class _IngredientScannerScreenState extends State<IngredientScannerScreen>
     with SingleTickerProviderStateMixin {
   File? _image;
-  String _result = "Ready to scan";
-  Interpreter? _interpreter;
-  List<String>? _labels;
+  List<String> _detectedIngredients = [];
   final ImagePicker _picker = ImagePicker();
+  String _result = "Ready to scan";
 
   List<Map<String, dynamic>> _suggestedRecipes = [];
   final bool _isLoadingRecipes = false;
@@ -205,7 +205,6 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen>
   @override
   void initState() {
     super.initState();
-    _loadModelAndLabels();
     _scanAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -223,7 +222,13 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen>
 
   @override
   Widget build(BuildContext context) {
-    bool hasMatch = _result.contains("Found");
+    final pantryProvider = context.watch<PantryProvider>();
+
+    final List<String> officialNames = pantryProvider.masterIngredients
+        .map((item) => item['name'].toString())
+        .toList();
+
+    bool hasMatch = _detectedIngredients.isNotEmpty;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAF8),
@@ -318,9 +323,9 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen>
                     context.read<PantryProvider>().addIngredient(selection),
                 onSearchChanged: (selection) {
                   setState(() {
-                    _result = "Found: $selection";
+                    _detectedIngredients = [selection];
                     _image = null;
-                    _findRecipesForIngredient(selection);
+                    _findRecipesForMultipleIngredients([selection]);
                   });
                 },
               ),
@@ -393,7 +398,7 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen>
                 // --- STITCH: FROSTED GLASS RESULT CARD ---
                 if (hasMatch && !_isAnalyzing)
                   Positioned(
-                    bottom: -30,
+                    bottom: -60,
                     left: 20,
                     right: 20,
                     child: ClipRRect(
@@ -465,13 +470,53 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen>
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _result.replaceAll("Found: ", ""),
-                                      style: const TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF191C1B),
+                                    const SizedBox(height: 8),
+
+                                    // --- UPGRADED: SCROLLABLE MULTI-INGREDIENT CHIPS ---
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxHeight:
+                                            80, // The "ceiling" - limits height to ~3 rows
+                                      ),
+                                      child: SingleChildScrollView(
+                                        physics:
+                                            const BouncingScrollPhysics(), // Premium scroll feel
+                                        child: Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: _detectedIngredients.map((
+                                            ingredient,
+                                          ) {
+                                            return Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 6,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: const Color(
+                                                  0xFF006E1C,
+                                                ).withOpacity(0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                border: Border.all(
+                                                  color: const Color(
+                                                    0xFF006E1C,
+                                                  ).withOpacity(0.2),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                ingredient,
+                                                style: const TextStyle(
+                                                  color: Color(0xFF006E1C),
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 13,
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -486,7 +531,7 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen>
               ],
             ),
 
-            const SizedBox(height: 60), // Spacing for the overlapping card
+            const SizedBox(height: 95), // Spacing for the overlapping card
             // --- SUGGESTED RECIPES LIST ---
             if (hasMatch && !_isAnalyzing)
               Column(
@@ -624,21 +669,6 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen>
     );
   }
 
-  Future<void> _loadModelAndLabels() async {
-    try {
-      _interpreter = await Interpreter.fromAsset(
-        'assets/malaysian_ingredients.tflite',
-      );
-      String labelsData = await rootBundle.loadString('assets/labels.txt');
-      _labels = labelsData
-          .split('\n')
-          .where((label) => label.isNotEmpty)
-          .toList();
-    } catch (e) {
-      setState(() => _result = "Error loading AI model.");
-    }
-  }
-
   void _findRecipesForIngredient(String scannedIngredient) {
     // 1. Grab the global list
     final allRecipes = context.read<PantryProvider>().allRecipes;
@@ -668,77 +698,130 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen>
 
     setState(() {
       _image = File(photo.path);
-      _result = "Analyzing ingredient...";
       _isAnalyzing = true;
       _suggestedRecipes.clear();
+      _detectedIngredients
+          .clear(); // <-- NEW: Clear old chips when a new photo is taken
     });
 
     _runInference(File(photo.path));
   }
 
   Future<void> _runInference(File imageFile) async {
-    if (_interpreter == null || _labels == null) return;
+    try {
+      final imageBytes = await imageFile.readAsBytes();
 
-    img.Image? rawImage = img.decodeImage(imageFile.readAsBytesSync());
-    if (rawImage == null) return;
-    img.Image resizedImage = img.copyResize(rawImage, width: 224, height: 224);
+      final model = FirebaseVertexAI.instance.generativeModel(
+        model: 'gemini-2.5-flash',
+        generationConfig: GenerationConfig(
+          responseMimeType: 'application/json',
+        ),
+        // --- UPGRADED INSTRUCTIONS FOR MULTIPLE ITEMS ---
+        systemInstruction: Content.system('''
+          You are an expert Malaysian food ingredient identifier.
+          Look at the image and identify ALL visible raw ingredients.
+          Return the raw ingredient names in UPPERCASE.
+          
+          You MUST respond in valid JSON using EXACTLY this schema:
+          {
+            "ingredients": [
+              {
+                "name": "CHICKEN",
+                "confidence": 0.95
+              },
+              {
+                "name": "SERAI",
+                "confidence": 0.85
+              }
+            ]
+          }
+        '''),
+      );
 
-    var input = List.generate(
-      1,
-      (i) => List.generate(
-        224,
-        (y) => List.generate(224, (x) => List.generate(3, (c) => 0.0)),
-      ),
-    );
+      final prompt = [
+        Content.multi([
+          TextPart('Identify all ingredients in this image.'),
+          InlineDataPart('image/jpeg', imageBytes),
+        ]),
+      ];
 
-    for (int y = 0; y < 224; y++) {
-      for (int x = 0; x < 224; x++) {
-        final pixel = resizedImage.getPixel(x, y);
-        input[0][y][x][0] = pixel.r / 255.0;
-        input[0][y][x][1] = pixel.g / 255.0;
-        input[0][y][x][2] = pixel.b / 255.0;
+      final response = await model.generateContent(prompt);
+
+      if (response.text != null) {
+        String rawText = response.text!
+            .replaceAll('```json', '')
+            .replaceAll('```', '')
+            .trim();
+        final Map<String, dynamic> data = jsonDecode(rawText);
+
+        // 1. Extract the list of ingredients
+        List<dynamic> detectedItems = data['ingredients'] ?? [];
+        List<String> validIngredients = [];
+
+        // 2. Loop through and filter the good ones
+        for (var item in detectedItems) {
+          String name = item['name'] ?? "UNKNOWN";
+          double confidence = (item['confidence'] ?? 0.0).toDouble();
+
+          if (name != "UNKNOWN" && confidence > 0.6) {
+            validIngredients.add(name);
+            // Instantly save to Pantry!
+            if (mounted) {
+              context.read<PantryProvider>().addIngredient(name);
+            }
+          }
+        }
+
+        setState(() {
+          _isAnalyzing = false;
+        });
+
+        // 3. Update the UI and fetch recipes!
+        if (validIngredients.isNotEmpty) {
+          setState(() {
+            // Save the actual list instead of a joined string
+            _detectedIngredients = validIngredients;
+          });
+
+          // Pass the whole list to our new recipe finder
+          _findRecipesForMultipleIngredients(validIngredients);
+        } else {
+          setState(() {
+            _result = "No clear ingredients found. Try a better angle!";
+          });
+        }
       }
+    } catch (e) {
+      print("Vision AI Error: $e");
+      setState(() {
+        _isAnalyzing = false;
+        _result = "Error analyzing image.";
+      });
     }
+  }
 
-    var output = List.filled(1 * 3, 0.0).reshape([1, 3]);
-    _interpreter!.run(input, output);
+  void _findRecipesForMultipleIngredients(List<String> scannedIngredients) {
+    // 1. Grab the global list
+    final allRecipes = context.read<PantryProvider>().allRecipes;
 
-    List<double> probabilities = (output[0] as List).cast<double>();
-    double maxProb = 0;
-    int maxIndex = -1;
+    // 2. Filter it instantly in memory!
+    final matchingRecipes = allRecipes.where((recipe) {
+      if (recipe['ingredients'] == null) return false;
+      List<dynamic> recipeIngredients = recipe['ingredients'];
 
-    for (int i = 0; i < probabilities.length; i++) {
-      if (probabilities[i] > maxProb) {
-        maxProb = probabilities[i];
-        maxIndex = i;
-      }
-    }
+      // 3. Check if the recipe contains ANY of the scanned items
+      return recipeIngredients.any((item) {
+        String recipeItem = item.toString().toUpperCase();
+        return scannedIngredients.any(
+          (scanned) => recipeItem == scanned.toUpperCase(),
+        );
+      });
+    }).toList();
 
+    // 4. Update your UI
     setState(() {
-      _isAnalyzing = false;
+      _suggestedRecipes = matchingRecipes;
     });
-
-    if (maxProb > 0.6) {
-      String ingredientName = _labels![maxIndex]
-          .replaceAll('_', ' ')
-          .toUpperCase()
-          .trim();
-
-      setState(() {
-        _result = "Found: $ingredientName";
-      });
-
-      if (mounted) {
-        context.read<PantryProvider>().addIngredient(ingredientName);
-      }
-      // ----------------------------
-
-      _findRecipesForIngredient(ingredientName);
-    } else {
-      setState(() {
-        _result = "Not sure! Try a clearer angle.";
-      });
-    }
   }
 }
 
@@ -795,11 +878,46 @@ class RecipeCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(
                       16,
                     ), // Adjust this number for more/less rounding
-                    child: Image.asset(
-                      AppImages.getRecipeImage(recipe["name"] ?? ""),
-                      width: 90,
-                      height: 100,
-                      fit: BoxFit.cover,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child:
+                          (recipe["image_url"] != null &&
+                              recipe["image_url"].toString().isNotEmpty)
+                          // 1. If it's an AI recipe with a URL, load from Unsplash
+                          ? CachedNetworkImage(
+                              imageUrl: recipe["image_url"],
+                              width: 90,
+                              height: 100,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(
+                                width: 90,
+                                height: 100,
+                                color: Colors.grey.shade100,
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFF006E1C),
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) => Image.asset(
+                                AppImages.getRecipeImage(recipe["name"] ?? ""),
+                                width: 90,
+                                height: 100,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          // 2. Otherwise, load from local assets
+                          : Image.asset(
+                              AppImages.getRecipeImage(recipe["name"] ?? ""),
+                              width: 90,
+                              height: 100,
+                              fit: BoxFit.cover,
+                            ),
                     ),
                   ),
                 ),
@@ -924,15 +1042,28 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
           .collection('users')
           .doc(user.uid)
           .get();
+
       if (userDoc.exists) {
-        try {
-          List<dynamic> favorites = userDoc.get('favorites') ?? [];
-          if (favorites.contains(_recipeName)) {
-            setState(() {
-              _isFavorite = true;
-            });
-          }
-        } catch (e) {}
+        final data = userDoc.data() as Map<String, dynamic>;
+
+        // 1. Check standard favorites (List of Strings)
+        List<dynamic> favorites = data['favorites'] ?? [];
+        if (favorites.contains(_recipeName)) {
+          setState(() => _isFavorite = true);
+          return; // Stop here if found
+        }
+
+        // 2. Check AI favorites (List of Maps)
+        List<dynamic> aiFavorites = data['ai_favorites'] ?? [];
+
+        // We use .any() to check if any Map in the list has a matching name
+        bool isSavedInAi = aiFavorites.any(
+          (recipeMap) => recipeMap['name'] == _recipeName,
+        );
+
+        if (isSavedInAi) {
+          setState(() => _isFavorite = true);
+        }
       }
     } catch (e) {
       print("Error fetching user data: $e");
@@ -951,29 +1082,51 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     final userRef = FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid);
+
+    // 1. Identify if this is a temporary AI recipe
+    bool isAiRecipe = widget.recipe["isAI"] == true;
+
     setState(() {
       _isFavorite = !_isFavorite;
-    }); // Optimistic UI update
+    });
 
     try {
       if (_isFavorite) {
-        await userRef.set({
-          'favorites': FieldValue.arrayUnion([_recipeName]),
-        }, SetOptions(merge: true));
+        // --- SAVING ---
+        if (isAiRecipe) {
+          // For AI recipes, we save the WHOLE Map so we don't lose the data
+          await userRef.set({
+            'ai_favorites': FieldValue.arrayUnion([widget.recipe]),
+          }, SetOptions(merge: true));
+        } else {
+          // For standard recipes, we stick to just saving the name/ID
+          await userRef.set({
+            'favorites': FieldValue.arrayUnion([_recipeName]),
+          }, SetOptions(merge: true));
+        }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Saved to Favorites! ❤️")),
           );
         }
       } else {
-        await userRef.set({
-          'favorites': FieldValue.arrayRemove([_recipeName]),
-        }, SetOptions(merge: true));
+        // --- REMOVING ---
+        if (isAiRecipe) {
+          await userRef.set({
+            'ai_favorites': FieldValue.arrayRemove([widget.recipe]),
+          }, SetOptions(merge: true));
+        } else {
+          await userRef.set({
+            'favorites': FieldValue.arrayRemove([_recipeName]),
+          }, SetOptions(merge: true));
+        }
       }
     } catch (e) {
       setState(() {
         _isFavorite = !_isFavorite;
-      }); // Revert on failure
+      });
+      print("Favorite Error: $e");
     }
   }
 
@@ -1003,12 +1156,11 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
               clipBehavior: Clip.none,
               children: [
                 CachedNetworkImage(
-                  imageUrl:
-                      widget.recipe["image_url"] ??
-                      AppImages.getRecipeImage(_recipeName),
+                  // 1. Pass an empty string if null to safely trigger the errorWidget
+                  imageUrl: widget.recipe["image_url"] ?? "",
                   fit: BoxFit.cover,
 
-                  // Shows a subtle loading spinner while it downloads the first time
+                  // 2. The Loading Spinner
                   placeholder: (context, url) => Container(
                     color: Colors.grey.shade100,
                     child: const Center(
@@ -1018,10 +1170,13 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                     ),
                   ),
 
-                  // If the Firebase link breaks, show an error icon instead of crashing
-                  errorWidget: (context, url, error) => Container(
-                    color: Colors.grey.shade100,
-                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  // 3. THE FALLBACK: If the URL is empty or the Unsplash link breaks,
+                  // load the local asset here!
+                  errorWidget: (context, url, error) => Image.asset(
+                    AppImages.getRecipeImage(_recipeName),
+                    width: double.infinity,
+                    height: 360,
+                    fit: BoxFit.cover,
                   ),
                 ),
                 // Frosted Back Button
@@ -1506,41 +1661,41 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
     if (user == null) return;
 
     try {
-      // 1. Get the list of saved recipe names from the user's document
       DocumentSnapshot userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
 
-      List<dynamic> savedRecipeNames = [];
-      if (userDoc.exists && userDoc.data() != null) {
-        final data = userDoc.data() as Map<String, dynamic>;
-        savedRecipeNames = data['favorites'] ?? [];
-      }
-
-      // If they haven't saved anything yet, stop loading and show the empty state
-      if (savedRecipeNames.isEmpty) {
-        setState(() {
-          _favoriteRecipes = [];
-          _isLoading = false;
-        });
+      if (!userDoc.exists || userDoc.data() == null) {
+        setState(() => _isLoading = false);
         return;
       }
 
-      // 2. Fetch ALL recipes from the main database
-      // (Since your FYP database is small, this is the safest and fastest way to filter)
-      QuerySnapshot recipesSnapshot = await FirebaseFirestore.instance
-          .collection('recipes')
-          .get();
+      final data = userDoc.data() as Map<String, dynamic>;
 
+      // 1. Get standard favorite names AND the full AI favorite objects
+      List<dynamic> savedRecipeNames = data['favorites'] ?? [];
+      List<dynamic> aiFavorites = data['ai_favorites'] ?? [];
+
+      // 2. Fetch standard recipes from the main database
       List<Map<String, dynamic>> matchedRecipes = [];
 
-      for (var doc in recipesSnapshot.docs) {
-        var recipeData = doc.data() as Map<String, dynamic>;
-        // 3. If the recipe's name is in the user's saved list, add it to our UI list!
-        if (savedRecipeNames.contains(recipeData['name'])) {
-          matchedRecipes.add(recipeData);
+      if (savedRecipeNames.isNotEmpty) {
+        QuerySnapshot recipesSnapshot = await FirebaseFirestore.instance
+            .collection('recipes')
+            .get();
+
+        for (var doc in recipesSnapshot.docs) {
+          var recipeData = doc.data() as Map<String, dynamic>;
+          if (savedRecipeNames.contains(recipeData['name'])) {
+            matchedRecipes.add(recipeData);
+          }
         }
+      }
+
+      // 3. ADD the AI favorites directly (they are already full maps!)
+      for (var aiRecipe in aiFavorites) {
+        matchedRecipes.add(Map<String, dynamic>.from(aiRecipe));
       }
 
       setState(() {
@@ -1549,9 +1704,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
       });
     } catch (e) {
       print("Error loading favorites: $e");
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
