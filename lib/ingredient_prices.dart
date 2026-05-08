@@ -97,27 +97,61 @@ class _IngredientPricesState extends State<IngredientPrices> {
 
     Map<String, String> dosmTranslator = {
       "BAWANG MERAH": "BAWANG KECIL MERAH BIASA IMPORT (INDIA)",
-      "CILI PADI": "CILI MERAH - KULAI",
+      "BAWANG BESAR": "BAWANG BESAR KUNING/HOLLAND",
+      "BAWANG PUTIH": "BAWANG PUTIH IMPORT (CHINA)",
+      "HALIA": "HALIA BASAH (TUA)",
+      "SERAI": "SERAI",
+      "LENGKUAS": "LENGKUAS",
+      "TOMATO": "TOMATO",
+      "LOBAK MERAH": "LOBAK MERAH",
+      "SAWI": "SAWI HIJAU",
+      "KOBIS": "KUBIS BULAT (TEMPATAN)",
+      "TIMUN": "TIMUN",
+      "TERUNG": "TERUNG PANJANG",
       "CILI MERAH": "CILI MERAH - KULAI",
+      "CILI PADI": "CILI API/PADI HIJAU",
+      "UBI KENTANG": "UBI KENTANG RUSSET",
+      "BROKOLI": "BROKOLI",
+      "AYAM": "AYAM BERSIH - STANDARD",
+      "DAGING": "DAGING LEMBU IMPORT (BLOCK)",
+      "TELUR": "TELUR AYAM GRED A",
+      "IKAN KEMBUNG": "IKAN KEMBUNG (ANTARA 8 HINGGA 12 EKOR SEKILOGRAM)",
+      "IKAN SIAKAP": "IKAN SIAKAP (ANTARA 2 HINGGA 4 EKOR SEKILOGRAM)",
+      "UDANG": "UDANG PUTIH BESAR (ANTARA 20 HINGGA 30 EKOR SEKILOGRAM)",
+      "SOTONG": "SOTONG (≥ 6 EKOR SEKILOGRAM)",
+      "IKAN BILIS": "IKAN BILIS GRED B (KOPEK)",
+      "BERAS": "BERAS SUPER CAP RAMBUTAN 5% (IMPORT)",
+      "MINYAK MASAK": "MINYAK MASAK TULEN CAP SAJI",
+      "GULA": "GULA PUTIH BERTAPIS KASAR (PELBAGAI JENAMA)",
+      "TEPUNG GANDUM": "TEPUNG GANDUM GP (BERBUNGKUS) PELBAGAI JENAMA",
+      "SANTAN": "SANTAN KELAPA SEGAR (BIASA)",
+      "GARAM": "GARAM HALUS BIASA (PELBAGAI JENAMA)",
+      "KICAP MANIS": "KICAP LEMAK MANIS CAP KIPAS UDANG",
+      "SOS TIRAM": "SOS TIRAM MAGGI",
+      "CILI KERING": "CILI KERING KERINTING (BERTANGKAI/TIDAK BERTANGKAI)",
+      "SERBUK KUNYIT": "SERBUK KUNYIT BABAS",
+      "SERBUK KARI AYAM": "SERBUK KARI AYAM DAN DAGING ADABI",
     };
 
-    String dbSearchKey =
-        dosmTranslator[widget.ingredientName] ?? widget.ingredientName;
+    String searchKey = widget.ingredientName.toUpperCase();
+    String dbSearchKey = dosmTranslator[searchKey] ?? searchKey;
 
     try {
+      // 1. Fetch the 'stores' collection you populated with your Python script
       final QuerySnapshot storeDocs = await FirebaseFirestore.instance
           .collection('stores')
           .get();
 
-      // 1. Dictionary to keep the closest store per brand
+      // Dictionary to keep the closest store per brand
       Map<String, Map<String, dynamic>> closestStorePerBrand = {};
 
       for (var doc in storeDocs.docs) {
         Map<String, dynamic> storeData = doc.data() as Map<String, dynamic>;
         Map<String, dynamic> pricesMap = storeData['prices'] ?? {};
 
+        // Only process stores that actually sell this ingredient
         if (pricesMap.containsKey(dbSearchKey)) {
-          // --- 2. CALCULATE STRAIGHT LINE DISTANCE ---
+          // 2. Calculate Distance
           double distanceKm =
               Geolocator.distanceBetween(
                 _userPosition!.latitude,
@@ -129,6 +163,7 @@ class _IngredientPricesState extends State<IngredientPrices> {
 
           bool passesLocationCheck = false;
 
+          // 3. Location Filtering logic
           if (_selectedLocation == 'My Location') {
             if (distanceKm <= 30.0) passesLocationCheck = true;
           } else {
@@ -144,19 +179,32 @@ class _IngredientPricesState extends State<IngredientPrices> {
 
           if (!passesLocationCheck) continue;
 
-          // --- 3. BRAND DEDUPLICATION LOGIC ---
+          // 4. Deduplication logic (Closest store for Lotus, Aeon, etc.)
           String brandName = _identifyBrand(storeData['name']);
+
+          // --- THE CHANGE: Extract both price and unit from the Map ---
+          var priceData = pricesMap[dbSearchKey];
+          double itemPrice = 0.0;
+          String itemUnit = "";
+
+          // Safety check in case some older data is still formatted as just a number
+          if (priceData is Map) {
+            itemPrice = (priceData['price'] as num).toDouble();
+            itemUnit = priceData['unit']?.toString() ?? "";
+          } else {
+            itemPrice = (priceData as num).toDouble();
+          }
 
           Map<String, dynamic> currentStore = {
             "name": storeData['name'],
-            "price": (pricesMap[dbSearchKey] as num).toDouble(),
+            "price": itemPrice, // <--- Updated
+            "unit": itemUnit, // <--- ADDED UNIT HERE
             "distance_km": distanceKm,
             "lat": storeData['lat'],
             "lng": storeData['lng'],
             "brand": brandName,
           };
 
-          // If we haven't seen this brand yet, or this store is closer than the one we found
           if (!closestStorePerBrand.containsKey(brandName) ||
               distanceKm < closestStorePerBrand[brandName]!['distance_km']) {
             closestStorePerBrand[brandName] = currentStore;
@@ -164,20 +212,20 @@ class _IngredientPricesState extends State<IngredientPrices> {
         }
       }
 
-      // --- 4. FINAL SORTING ---
+      // Convert map values back to a list
       List<Map<String, dynamic>> finalResult = closestStorePerBrand.values
           .toList();
 
-      // Cheapest price first
+      // 5. Final Sort: Cheapest price first
       finalResult.sort((a, b) => a["price"].compareTo(b["price"]));
 
       if (!mounted) return;
       setState(() {
         _nearbyStores = finalResult;
-        _isLoading = false;
+        _isLoading = false; // STOP THE SPINNER!
       });
     } catch (e) {
-      print("Firebase Error: $e");
+      debugPrint("Firebase Error: $e");
       if (!mounted) return;
       setState(() {
         _statusMessage = "Failed to load store prices.";
@@ -414,12 +462,39 @@ class _IngredientPricesState extends State<IngredientPrices> {
                                         mainAxisAlignment:
                                             MainAxisAlignment.end,
                                         children: [
-                                          Text(
-                                            "RM ${store["price"].toStringAsFixed(2)}",
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: 18,
-                                              color: Color(0xFF006E1C),
+                                          // --- UPGRADED: PREMIUM RICH TEXT PRICE & UNIT ---
+                                          RichText(
+                                            text: TextSpan(
+                                              children: [
+                                                // The "Hero" Price (Big, Bold, Green)
+                                                TextSpan(
+                                                  text:
+                                                      "RM ${store["price"].toStringAsFixed(2)}",
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight
+                                                        .w900, // Extra bold
+                                                    fontSize: 19,
+                                                    color: Color(0xFF006E1C),
+                                                    letterSpacing: -0.5,
+                                                  ),
+                                                ),
+                                                // The "Subtitle" Unit (Smaller, Muted Grey/Green)
+                                                if (store["unit"] != null &&
+                                                    store["unit"]
+                                                        .toString()
+                                                        .isNotEmpty)
+                                                  TextSpan(
+                                                    text: " / ${store["unit"]}",
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontSize: 13,
+                                                      color: Color(
+                                                        0xFF6F7A6B,
+                                                      ), // Matches your distance text color
+                                                    ),
+                                                  ),
+                                              ],
                                             ),
                                           ),
                                         ],

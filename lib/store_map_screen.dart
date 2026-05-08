@@ -410,19 +410,29 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // --- STITCH: GOOGLE MAP INSTEAD OF MAPBOX ---
           GoogleMap(
-            onMapCreated: _onMapCreated,
+            onMapCreated: (c) => _mapController = c,
             initialCameraPosition: CameraPosition(
               target: LatLng(widget.targetLat, widget.targetLng),
               zoom: 13.0,
             ),
-            markers: _markers,
+            // MODERN FIX: Map the list directly to markers here
+            markers: widget.nearbyStores.map((store) {
+              return Marker(
+                markerId: MarkerId(store['name']),
+                position: LatLng(store['lat'], store['lng']),
+                // Using the default "Advanced Marker" styling available in 2026
+                // which handles performance and styling much better natively
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueRed,
+                ),
+                onTap: () =>
+                    _showStoreBottomSheet(store, store['lat'], store['lng']),
+              );
+            }).toSet(),
             polylines: _polylines,
             myLocationEnabled: true,
             myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
           ),
 
           Positioned(

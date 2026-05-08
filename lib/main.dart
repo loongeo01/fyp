@@ -17,13 +17,13 @@ import 'auth_screen.dart';
 
 import 'package:provider/provider.dart';
 import 'pantry_provider.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import 'dart:convert';
 import 'package:firebase_vertexai/firebase_vertexai.dart';
+import 'notification_service.dart';
 
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
@@ -31,13 +31,13 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   final token = dotenv.env['googleApiKey'];
+  await NotificationService().init();
 
   if (token == null || token.isEmpty) {
     throw Exception("googleApiKey not found. Check your .env file.");
   }
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  mapbox.MapboxOptions.setAccessToken(token!);
   runApp(
     ChangeNotifierProvider(
       create: (context) => PantryProvider(),

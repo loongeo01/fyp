@@ -17,9 +17,9 @@ class PantryRecipesScreen extends StatefulWidget {
 
 class _PantryRecipesScreenState extends State<PantryRecipesScreen> {
   List<Map<String, dynamic>> aiGeneratedRecipes = [];
-  bool isThinking = false; // Controls our loading spinner
+  bool isThinking = false;
 
-  // --- THE SYNCHRONOUS SORTING ALGORITHM (Kept exactly as you wrote it!) ---
+  // --- THE SYNCHRONOUS SORTING ALGORITHM ---
   List<Map<String, dynamic>> _getSortedRecipes(
     List<Map<String, dynamic>> globalRecipes,
   ) {
@@ -96,25 +96,92 @@ class _PantryRecipesScreenState extends State<PantryRecipesScreen> {
         iconTheme: const IconThemeData(color: Color(0xFF191C1B)),
       ),
 
-      // --- FIXED: Using allDisplayedRecipes instead of sortedRecipes ---
-      body: !provider.hasFetchedRecipes
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF006E1C)),
-            )
-          : allDisplayedRecipes.isEmpty
-          ? _buildEmptyState()
-          : ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              itemCount:
-                  allDisplayedRecipes.length, // Fixed the .length.length typo
-              itemBuilder: (context, index) {
-                final recipe =
-                    allDisplayedRecipes[index]; // Grab from the merged list!
-                return _buildPremiumRecipeCard(context, recipe);
-              },
-            ),
+      // --- UPGRADED: BODY WITH INGREDIENTS HEADER ---
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. The "Cooking With" Header
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Cooking with:",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF191C1B),
+                  ),
+                ),
+                const SizedBox(height: 8),
 
-      // --- NEW: THE AI CHEF BUTTON ---
+                // --- YOUR NEW WRAP LAYOUT ---
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxHeight: 80, // The "ceiling" - limits height to ~3 rows
+                  ),
+                  child: SingleChildScrollView(
+                    physics:
+                        const BouncingScrollPhysics(), // Premium scroll feel
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: widget.userIngredients.map((ingredient) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF006E1C).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFF006E1C).withOpacity(0.2),
+                            ),
+                          ),
+                          child: Text(
+                            ingredient,
+                            style: const TextStyle(
+                              color: Color(0xFF006E1C),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+                // -----------------------------
+              ],
+            ),
+          ),
+
+          // 2. The Recipes List (or Empty/Loading State)
+          Expanded(
+            child: !provider.hasFetchedRecipes
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF006E1C)),
+                  )
+                : allDisplayedRecipes.isEmpty
+                ? _buildEmptyState()
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    itemCount: allDisplayedRecipes.length,
+                    itemBuilder: (context, index) {
+                      final recipe = allDisplayedRecipes[index];
+                      return _buildPremiumRecipeCard(context, recipe);
+                    },
+                  ),
+          ),
+        ],
+      ),
+      // --- THE AI CHEF BUTTON (RESTORED!) ---
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: const Color(0xFFD78A1F),
         elevation: 4,
@@ -140,7 +207,7 @@ class _PantryRecipesScreenState extends State<PantryRecipesScreen> {
             : () async {
                 setState(() => isThinking = true);
 
-                // 1. Call the AI Service
+                // 1. Call the AI Service using exactly the selected ingredients!
                 final newRecipes = await AIRecipeService.generateRecipes(
                   availableIngredients: widget.userIngredients,
                   previousRecipes: aiGeneratedRecipes
@@ -149,16 +216,12 @@ class _PantryRecipesScreenState extends State<PantryRecipesScreen> {
                 );
 
                 if (newRecipes != null) {
-                  // 2. Prepare the pantry set for efficient matching
-                  // We convert everything to UPPERCASE to ensure "serai" matches "SERAI"
                   Set<String> myPantry = widget.userIngredients
                       .map((e) => e.toUpperCase())
                       .toSet();
 
-                  // 3. Transform the raw AI JSON into formatted recipe maps
                   List<Map<String, dynamic>>
                   formattedAiRecipes = newRecipes.map((recipe) {
-                    // Extract the ingredients list from the AI response
                     List<dynamic> aiIngredients = recipe["ingredients"] ?? [];
 
                     int matchCount = 0;
@@ -171,26 +234,21 @@ class _PantryRecipesScreenState extends State<PantryRecipesScreen> {
                     int totalNeeded = aiIngredients.length;
                     int missingCount = totalNeeded - matchCount;
 
-                    // Return a complete Map that matches your app's expected schema
                     return {
                       ...recipe as Map<String, dynamic>,
-                      // CRITICAL: Generate a unique ID so the Favorite button works
                       "id":
                           "AI_${recipe["name"]}_${DateTime.now().millisecondsSinceEpoch}",
                       "matchCount": matchCount,
                       "missingCount": missingCount,
                       "totalNeeded": totalNeeded,
-                      "isAI":
-                          true, // Tells the UI to use Unsplash logic and specific favorite logic
+                      "isAI": true,
                     };
                   }).toList();
 
-                  // 4. Update the screen state to show the new cards
                   setState(() {
                     aiGeneratedRecipes.addAll(formattedAiRecipes);
                   });
                 } else {
-                  // Error handling if the AI Chef is "taking a break"
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -302,14 +360,12 @@ class _PantryRecipesScreenState extends State<PantryRecipesScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- IMAGE PLACEHOLDER ---
                 // --- IMAGE AREA (WITH FIREBASE FALLBACK) ---
                 ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child:
                       (recipe["image_url"] != null &&
                           recipe["image_url"].toString().isNotEmpty)
-                      // 1. If it's an AI recipe with a URL, load from Unsplash
                       ? CachedNetworkImage(
                           imageUrl: recipe["image_url"],
                           width: 90,
@@ -337,7 +393,6 @@ class _PantryRecipesScreenState extends State<PantryRecipesScreen> {
                             fit: BoxFit.cover,
                           ),
                         )
-                      // 2. Otherwise, load from local assets
                       : Image.asset(
                           AppImages.getRecipeImage(recipe["name"] ?? ""),
                           width: 90,
@@ -416,9 +471,7 @@ class _PantryRecipesScreenState extends State<PantryRecipesScreen> {
                                 style: TextStyle(
                                   color: isPerfectMatch
                                       ? const Color(0xFF006E1C)
-                                      : const Color(
-                                          0xFFD78A1F,
-                                        ), // Green or Orange
+                                      : const Color(0xFFD78A1F),
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
