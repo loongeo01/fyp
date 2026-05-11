@@ -85,4 +85,34 @@ class NotificationService {
     // They changed this to require the 'id:' name as well!
     await flutterLocalNotificationsPlugin.cancel(id: notificationId);
   }
+
+  // --- NEW: INSTANT PRICE DROP NOTIFICATION ---
+  Future<void> showPriceDropNotification(
+    String ingredient,
+    double newPrice,
+    String storeName,
+  ) async {
+    final int notificationId = ingredient.hashCode & 0x7FFFFFFF;
+
+    const NotificationDetails platformSpecifics = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'price_drop_channel',
+        'Price Drop Alerts',
+        channelDescription:
+            'Alerts when ingredient prices drop below your target',
+        importance: Importance.max,
+        priority: Priority.high,
+        styleInformation: BigTextStyleInformation(''), // Allows long text
+      ),
+      iOS: DarwinNotificationDetails(),
+    );
+
+    await flutterLocalNotificationsPlugin.show(
+      id: notificationId,
+      title: 'Price Drop Alert! 📉',
+      body:
+          '$ingredient is down to RM ${newPrice.toStringAsFixed(2)} at $storeName!',
+      notificationDetails: platformSpecifics,
+    );
+  }
 }

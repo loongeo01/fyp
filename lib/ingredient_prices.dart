@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import 'package:recipe_app/app_images.dart';
+import 'package:recipe_app/pantry_provider.dart';
 import 'package:recipe_app/searchBar.dart';
-import 'package:recipe_app/store_map_screen.dart'; // THE MISSING PIECE!
+import 'package:recipe_app/store_map_screen.dart';
+import 'package:recipe_app/price_alerts_screen.dart'; // <--- NEW IMPORT
+import 'premium_ingredient_wrap.dart';
 
 class IngredientPrices extends StatefulWidget {
-  String ingredientName;
+  final String ingredientName;
+  final List<String> initialBasket;
 
-  IngredientPrices({super.key, required this.ingredientName});
+  const IngredientPrices({
+    super.key,
+    this.ingredientName = "",
+    this.initialBasket = const [],
+  });
 
   @override
   State<IngredientPrices> createState() => _IngredientPricesState();
@@ -28,10 +37,44 @@ class _IngredientPricesState extends State<IngredientPrices> {
   Position? _userPosition;
   List<Map<String, dynamic>> _nearbyStores = [];
 
+  final List<String> _basket = [];
+
   @override
   void initState() {
     super.initState();
+    if (widget.initialBasket.isNotEmpty) {
+      _basket.addAll(widget.initialBasket.map((e) => e.toUpperCase()));
+    } else if (widget.ingredientName.isNotEmpty) {
+      _basket.add(widget.ingredientName.toUpperCase());
+    }
+
     _determinePosition();
+  }
+
+  void _addToBasket(String item) {
+    String cleanItem = item.trim().toUpperCase();
+    if (cleanItem.isNotEmpty && !_basket.contains(cleanItem)) {
+      setState(() {
+        _basket.insert(0, cleanItem);
+        _isLoading = true;
+      });
+      _fetchStorePricesFromFirebase();
+    }
+  }
+
+  void _removeFromBasket(String item) {
+    setState(() {
+      _basket.remove(item);
+      if (_basket.isEmpty) {
+        _nearbyStores = [];
+        _isLoading = false;
+      } else {
+        _isLoading = true;
+      }
+    });
+    if (_basket.isNotEmpty) {
+      _fetchStorePricesFromFirebase();
+    }
   }
 
   Future<void> _determinePosition() async {
@@ -40,7 +83,7 @@ class _IngredientPricesState extends State<IngredientPrices> {
 
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      if (!mounted) return; // <--- ADD THIS
+      if (!mounted) return;
       setState(() {
         _statusMessage = "Please turn on your phone's GPS.";
         _isLoading = false;
@@ -52,7 +95,7 @@ class _IngredientPricesState extends State<IngredientPrices> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        if (!mounted) return; // <--- ADD THIS
+        if (!mounted) return;
         setState(() {
           _statusMessage = "Location permission denied.";
           _isLoading = false;
@@ -62,7 +105,7 @@ class _IngredientPricesState extends State<IngredientPrices> {
     }
 
     if (permission == LocationPermission.deniedForever) {
-      if (!mounted) return; // <--- ADD THIS
+      if (!mounted) return;
       setState(() {
         _statusMessage = "Permissions permanently denied in phone settings.";
         _isLoading = false;
@@ -73,11 +116,13 @@ class _IngredientPricesState extends State<IngredientPrices> {
     try {
       Position position = await Geolocator.getCurrentPosition();
       _userPosition = position;
-      if (widget.ingredientName != "") {
+      if (_basket.isNotEmpty) {
         await _fetchStorePricesFromFirebase();
+      } else {
+        setState(() => _isLoading = false);
       }
     } catch (e) {
-      if (!mounted) return; // <--- ADD THIS
+      if (!mounted) return;
       setState(() {
         _statusMessage = "Failed to get location.";
         _isLoading = false;
@@ -85,13 +130,12 @@ class _IngredientPricesState extends State<IngredientPrices> {
     }
   }
 
-  // --- THE REAL FIREBASE CONNECTION ---
   Future<void> _fetchStorePricesFromFirebase() async {
     if (!mounted) return;
 
     setState(() {
       _isLoading = true;
-      _statusMessage = "Finding stores...";
+      _statusMessage = "Calculating basket totals...";
       _nearbyStores = [];
     });
 
@@ -133,96 +177,111 @@ class _IngredientPricesState extends State<IngredientPrices> {
       "SERBUK KARI AYAM": "SERBUK KARI AYAM DAN DAGING ADABI",
     };
 
-    String searchKey = widget.ingredientName.toUpperCase();
-    String dbSearchKey = dosmTranslator[searchKey] ?? searchKey;
-
     try {
-      // 1. Fetch the 'stores' collection you populated with your Python script
       final QuerySnapshot storeDocs = await FirebaseFirestore.instance
           .collection('stores')
           .get();
 
-      // Dictionary to keep the closest store per brand
       Map<String, Map<String, dynamic>> closestStorePerBrand = {};
 
       for (var doc in storeDocs.docs) {
         Map<String, dynamic> storeData = doc.data() as Map<String, dynamic>;
         Map<String, dynamic> pricesMap = storeData['prices'] ?? {};
 
-        // Only process stores that actually sell this ingredient
-        if (pricesMap.containsKey(dbSearchKey)) {
-          // 2. Calculate Distance
-          double distanceKm =
-              Geolocator.distanceBetween(
-                _userPosition!.latitude,
-                _userPosition!.longitude,
-                storeData['lat'],
-                storeData['lng'],
-              ) /
-              1000;
+        double distanceKm =
+            Geolocator.distanceBetween(
+              _userPosition!.latitude,
+              _userPosition!.longitude,
+              storeData['lat'],
+              storeData['lng'],
+            ) /
+            1000;
 
-          bool passesLocationCheck = false;
+        bool passesLocationCheck = false;
+        if (_selectedLocation == 'My Location') {
+          if (distanceKm <= 30.0) passesLocationCheck = true;
+        } else {
+          String storeAddress = storeData['address'].toString().toUpperCase();
+          String storeName = storeData['name'].toString().toUpperCase();
+          String targetArea = _selectedLocation.toUpperCase();
+          if (storeName.contains(targetArea) ||
+              storeAddress.contains(targetArea)) {
+            passesLocationCheck = true;
+          }
+        }
 
-          // 3. Location Filtering logic
-          if (_selectedLocation == 'My Location') {
-            if (distanceKm <= 30.0) passesLocationCheck = true;
-          } else {
-            String storeAddress = storeData['address'].toString().toUpperCase();
-            String storeName = storeData['name'].toString().toUpperCase();
-            String targetArea = _selectedLocation.toUpperCase();
+        if (!passesLocationCheck) continue;
 
-            if (storeName.contains(targetArea) ||
-                storeAddress.contains(targetArea)) {
-              passesLocationCheck = true;
+        double totalBasketPrice = 0.0;
+        int foundCount = 0;
+        List<String> missingItems = [];
+
+        // RE-ADDED: Fetching breakdown for UI
+        List<Map<String, dynamic>> foundItems = [];
+
+        for (String item in _basket) {
+          String dbSearchKey = dosmTranslator[item] ?? item;
+
+          if (pricesMap.containsKey(dbSearchKey)) {
+            var priceData = pricesMap[dbSearchKey];
+            double itemPrice = 0.0;
+            String itemUnit = "";
+
+            if (priceData is Map) {
+              itemPrice = (priceData['price'] as num).toDouble();
+              itemUnit = priceData['unit']?.toString() ?? "";
+            } else {
+              itemPrice = (priceData as num).toDouble();
             }
-          }
 
-          if (!passesLocationCheck) continue;
+            totalBasketPrice += itemPrice;
+            foundCount++;
 
-          // 4. Deduplication logic (Closest store for Lotus, Aeon, etc.)
-          String brandName = _identifyBrand(storeData['name']);
-
-          // --- THE CHANGE: Extract both price and unit from the Map ---
-          var priceData = pricesMap[dbSearchKey];
-          double itemPrice = 0.0;
-          String itemUnit = "";
-
-          // Safety check in case some older data is still formatted as just a number
-          if (priceData is Map) {
-            itemPrice = (priceData['price'] as num).toDouble();
-            itemUnit = priceData['unit']?.toString() ?? "";
+            foundItems.add({
+              "name": item,
+              "price": itemPrice,
+              "unit": itemUnit,
+            });
           } else {
-            itemPrice = (priceData as num).toDouble();
+            missingItems.add(item);
           }
+        }
 
-          Map<String, dynamic> currentStore = {
-            "name": storeData['name'],
-            "price": itemPrice, // <--- Updated
-            "unit": itemUnit, // <--- ADDED UNIT HERE
-            "distance_km": distanceKm,
-            "lat": storeData['lat'],
-            "lng": storeData['lng'],
-            "brand": brandName,
-          };
+        if (foundCount == 0) continue;
 
-          if (!closestStorePerBrand.containsKey(brandName) ||
-              distanceKm < closestStorePerBrand[brandName]!['distance_km']) {
-            closestStorePerBrand[brandName] = currentStore;
-          }
+        String brandName = _identifyBrand(storeData['name']);
+
+        Map<String, dynamic> currentStore = {
+          "name": storeData['name'],
+          "total_price": totalBasketPrice,
+          "found_count": foundCount,
+          "found_items": foundItems,
+          "missing_items": missingItems,
+          "distance_km": distanceKm,
+          "lat": storeData['lat'],
+          "lng": storeData['lng'],
+          "brand": brandName,
+        };
+
+        if (!closestStorePerBrand.containsKey(brandName) ||
+            distanceKm < closestStorePerBrand[brandName]!['distance_km']) {
+          closestStorePerBrand[brandName] = currentStore;
         }
       }
 
-      // Convert map values back to a list
       List<Map<String, dynamic>> finalResult = closestStorePerBrand.values
           .toList();
 
-      // 5. Final Sort: Cheapest price first
-      finalResult.sort((a, b) => a["price"].compareTo(b["price"]));
+      finalResult.sort((a, b) {
+        int countCompare = b["found_count"].compareTo(a["found_count"]);
+        if (countCompare != 0) return countCompare;
+        return a["total_price"].compareTo(b["total_price"]);
+      });
 
       if (!mounted) return;
       setState(() {
         _nearbyStores = finalResult;
-        _isLoading = false; // STOP THE SPINNER!
+        _isLoading = false;
       });
     } catch (e) {
       debugPrint("Firebase Error: $e");
@@ -234,7 +293,6 @@ class _IngredientPricesState extends State<IngredientPrices> {
     }
   }
 
-  // --- HELPER: BRAND IDENTIFIER ---
   String _identifyBrand(String name) {
     String upperName = name.toUpperCase();
     if (upperName.contains("LOTUS")) return "LOTUS'S";
@@ -251,24 +309,41 @@ class _IngredientPricesState extends State<IngredientPrices> {
       backgroundColor: const Color(0xFFF8FAF8),
       appBar: AppBar(
         title: const Text(
-          "Nearby Results",
+          "Smart Basket",
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 24,
+            fontSize: 22,
             letterSpacing: -0.5,
+            color: Color(0xFF006E1C),
           ),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
+        iconTheme: const IconThemeData(color: Color(0xFF191C1B)),
+        // --- NEW: PIN ICON ACTION ---
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.push_pin_outlined, color: Color(0xFF006E1C)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PriceAlertsScreen(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- STITCH: FLOATING SEARCH & LOCATION UI ---
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   decoration: BoxDecoration(
@@ -283,20 +358,15 @@ class _IngredientPricesState extends State<IngredientPrices> {
                     ],
                   ),
                   child: IngredientSearchBar(
-                    onPlus: (test) {},
-                    onSearchChanged: (value) {
-                      setState(() {
-                        widget.ingredientName = value;
-                      });
-                      _fetchStorePricesFromFirebase();
-                    },
-                    hintText: "Search ingredients...",
-                    defaultText: widget.ingredientName,
-                    havePlusButton: false,
+                    onPlus: (value) => _addToBasket(value),
+                    onSearchChanged: (value) {},
+                    hintText: "Add ingredient to basket...",
+                    havePlusButton: true,
                   ),
                 ),
+
                 const SizedBox(height: 16),
-                // Modern Location Pill
+
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -304,7 +374,7 @@ class _IngredientPricesState extends State<IngredientPrices> {
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 2,
-                      ), // Tighter vertical padding for Dropdown
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
@@ -349,209 +419,423 @@ class _IngredientPricesState extends State<IngredientPrices> {
                                 newValue != _selectedLocation) {
                               setState(() {
                                 _selectedLocation = newValue;
-                                _isLoading =
-                                    true; // Show the spinner while searching
+                                _isLoading = true;
                               });
-                              // Re-run the Firebase query with the new location
                               _fetchStorePricesFromFirebase();
                             }
                           },
                         ),
                       ),
                     ),
+                    Text(
+                      "${_basket.length} Items in Basket",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF6F7A6B),
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
+                ),
+
+                const SizedBox(height: 12),
+
+                PremiumIngredientWrap(
+                  ingredients: _basket,
+                  maxHeight: 90.0,
+                  onDeleted: (item) => _removeFromBasket(item),
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 8),
+          const Divider(height: 1, color: Color(0xFFE2E8E2)),
 
-          // --- STITCH: PREMIUM RESULT CARDS ---
           Expanded(
-            child: _isLoading && widget.ingredientName != ""
+            child: _isLoading && _basket.isNotEmpty
                 ? const Center(
                     child: CircularProgressIndicator(color: Color(0xFF006E1C)),
+                  )
+                : _basket.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.shopping_basket_outlined,
+                          size: 64,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          "Your basket is empty",
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   )
                 : _nearbyStores.isEmpty
                 ? Center(
                     child: Text(
-                      "No stores found.",
-                      style: TextStyle(color: Colors.grey[500], fontSize: 16),
+                      "No stores have these items.",
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 16,
+                      ),
                     ),
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
-                      vertical: 8,
+                      vertical: 16,
                     ),
                     itemCount: _nearbyStores.length,
                     itemBuilder: (context, index) {
-                      final store = _nearbyStores[index];
-                      bool isCheapest = index == 0;
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: isCheapest
-                              ? Border.all(
-                                  color: const Color(
-                                    0xFF006E1C,
-                                  ).withOpacity(0.3),
-                                  width: 1.5,
-                                )
-                              : Border.all(
-                                  color: Colors.grey.shade100,
-                                  width: 1.0,
-                                ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF142814).withOpacity(0.04),
-                              blurRadius: 24,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => StoreMapScreen(
-                                  storeName: store["name"],
-                                  targetLat: store["lat"],
-                                  targetLng: store["lng"],
-                                  userLat: _userPosition!.latitude,
-                                  userLng: _userPosition!.longitude,
-                                  nearbyStores: _nearbyStores,
-                                ),
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Row(
-                              children: [
-                                // --- UPGRADED: STORE BRAND LOGO ---
-                                SizedBox(
-                                  width:
-                                      90, // Made wider for rectangular logos like Lotus's
-                                  height:
-                                      40, // Shorter height so it doesn't take up too much vertical space
-                                  child: Align(
-                                    alignment: Alignment
-                                        .centerLeft, // Aligns the logo to the left edge
-                                    child: Image(
-                                      image: AppImages.getStoreImageProvider(
-                                        store["brand"] ?? "Store",
-                                      ),
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          // --- UPGRADED: PREMIUM RICH TEXT PRICE & UNIT ---
-                                          RichText(
-                                            text: TextSpan(
-                                              children: [
-                                                // The "Hero" Price (Big, Bold, Green)
-                                                TextSpan(
-                                                  text:
-                                                      "RM ${store["price"].toStringAsFixed(2)}",
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight
-                                                        .w900, // Extra bold
-                                                    fontSize: 19,
-                                                    color: Color(0xFF006E1C),
-                                                    letterSpacing: -0.5,
-                                                  ),
-                                                ),
-                                                // The "Subtitle" Unit (Smaller, Muted Grey/Green)
-                                                if (store["unit"] != null &&
-                                                    store["unit"]
-                                                        .toString()
-                                                        .isNotEmpty)
-                                                  TextSpan(
-                                                    text: " / ${store["unit"]}",
-                                                    style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      fontSize: 13,
-                                                      color: Color(
-                                                        0xFF6F7A6B,
-                                                      ), // Matches your distance text color
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          const Icon(
-                                            Icons.map_outlined,
-                                            size: 14,
-                                            color: Color(0xFF6F7A6B),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            "${store["distance_km"].toStringAsFixed(1)} km",
-                                            style: const TextStyle(
-                                              color: Color(0xFF6F7A6B),
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                          const Padding(
-                                            padding: EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                            ),
-                                            child: CircleAvatar(
-                                              radius: 2,
-                                              backgroundColor: Colors.grey,
-                                            ),
-                                          ),
-                                          Text(
-                                            isCheapest
-                                                ? "In Stock"
-                                                : "Low Stock",
-                                            style: TextStyle(
-                                              color: isCheapest
-                                                  ? const Color(0xFF006E1C)
-                                                  : Colors.orange,
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                      return StoreReceiptCard(
+                        store: _nearbyStores[index],
+                        isBestOption: index == 0,
+                        totalBasketSize: _basket.length,
+                        userPosition: _userPosition!,
+                        allNearbyStores: _nearbyStores,
                       );
                     },
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class StoreReceiptCard extends StatefulWidget {
+  final Map<String, dynamic> store;
+  final bool isBestOption;
+  final int totalBasketSize;
+  final Position userPosition;
+  final List<Map<String, dynamic>> allNearbyStores;
+
+  const StoreReceiptCard({
+    super.key,
+    required this.store,
+    required this.isBestOption,
+    required this.totalBasketSize,
+    required this.userPosition,
+    required this.allNearbyStores,
+  });
+
+  @override
+  State<StoreReceiptCard> createState() => _StoreReceiptCardState();
+}
+
+class _StoreReceiptCardState extends State<StoreReceiptCard> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    int found = widget.store["found_count"];
+    List<String> missing = widget.store["missing_items"] as List<String>;
+    List<Map<String, dynamic>> foundItems =
+        widget.store["found_items"] as List<Map<String, dynamic>>;
+
+    // Watch the global target prices
+    final targetPrices = context.watch<PantryProvider>().targetPrices;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: widget.isBestOption
+            ? Border.all(
+                color: const Color(0xFF006E1C).withOpacity(0.5),
+                width: 2.0,
+              )
+            : Border.all(color: Colors.grey.shade100, width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF142814).withOpacity(0.04),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          setState(() {
+            _isExpanded = !_isExpanded;
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  SizedBox(
+                    width: 80,
+                    height: 40,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Image(
+                        image: AppImages.getStoreImageProvider(
+                          widget.store["brand"] ?? "Store",
+                        ),
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        "RM ${widget.store["total_price"].toStringAsFixed(2)}",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 22,
+                          color: Color(0xFF006E1C),
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            "Basket Total",
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
+                          Icon(
+                            _isExpanded ? Icons.expand_less : Icons.expand_more,
+                            size: 16,
+                            color: Colors.grey.shade400,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              Row(
+                children: [
+                  Icon(
+                    found == widget.totalBasketSize
+                        ? Icons.check_circle
+                        : Icons.error_outline,
+                    size: 16,
+                    color: found == widget.totalBasketSize
+                        ? const Color(0xFF006E1C)
+                        : const Color(0xFFD78A1F),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    "Found $found of ${widget.totalBasketSize} items",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: found == widget.totalBasketSize
+                          ? const Color(0xFF006E1C)
+                          : const Color(0xFFD78A1F),
+                    ),
+                  ),
+                  const Spacer(),
+                  const Icon(
+                    Icons.map_outlined,
+                    size: 14,
+                    color: Color(0xFF6F7A6B),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    "${widget.store["distance_km"].toStringAsFixed(1)} km",
+                    style: const TextStyle(
+                      color: Color(0xFF6F7A6B),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+
+              if (_isExpanded) ...[
+                const SizedBox(height: 16),
+                const Divider(color: Color(0xFFF2F4F2), thickness: 1.5),
+                const SizedBox(height: 12),
+
+                const Text(
+                  "RECEIPT BREAKDOWN",
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF6F7A6B),
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                ...foundItems.map((item) {
+                  // --- NEW: CHECK IF ITEM IS TRACKED ---
+                  bool isTracked = targetPrices.containsKey(item["name"]);
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // THE INGREDIENT NAME + BADGE
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  item["name"],
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF191C1B),
+                                    fontSize: 13,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (isTracked)
+                                Container(
+                                  margin: const EdgeInsets.only(left: 3),
+                                  child: Icon(
+                                    Icons.push_pin,
+                                    size: 13,
+                                    color: Color(0xFFD78A1F),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+
+                        // THE PRICE
+                        Row(
+                          children: [
+                            Text(
+                              "RM ${item["price"].toStringAsFixed(2)}",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF006E1C),
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color.fromARGB(173, 16, 122, 39),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(2.0),
+                                child: Text(
+                                  item["unit"].toString().isNotEmpty
+                                      ? '${item["unit"]}'
+                                      : '',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+
+                if (missing.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD78A1F).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          size: 16,
+                          color: Color(0xFFD78A1F),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "Not available here: ${missing.join(", ")}",
+                            style: const TextStyle(
+                              color: Color(0xFFD78A1F),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => StoreMapScreen(
+                            storeName: widget.store["name"],
+                            targetLat: widget.store["lat"],
+                            targetLng: widget.store["lng"],
+                            userLat: widget.userPosition.latitude,
+                            userLng: widget.userPosition.longitude,
+                            nearbyStores: widget.allNearbyStores,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.directions,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    label: const Text(
+                      "Get Directions",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF006E1C),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

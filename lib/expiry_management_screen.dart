@@ -14,19 +14,16 @@ class ExpiryManagementScreen extends StatefulWidget {
 }
 
 class _ExpiryManagementScreenState extends State<ExpiryManagementScreen> {
-  // Keeps track of which ingredient cards are currently expanded
   final Set<String> _expandedItems = {};
 
   @override
   void initState() {
     super.initState();
-    // Auto-expand the item they swiped on
     if (widget.targetIngredient != null) {
       _expandedItems.add(widget.targetIngredient!);
     }
   }
 
-  // Opens the beautiful material calendar
   void _addOrEditDate(
     BuildContext context,
     String itemName, {
@@ -46,7 +43,7 @@ class _ExpiryManagementScreenState extends State<ExpiryManagementScreen> {
               onPrimary: Colors.white,
               onSurface: Color(0xFF191C1B),
             ),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.white),
+            dialogTheme: const DialogThemeData(backgroundColor: Colors.white),
           ),
           child: child!,
         );
@@ -64,7 +61,7 @@ class _ExpiryManagementScreenState extends State<ExpiryManagementScreen> {
         context.read<PantryProvider>().addExpiryDate(itemName, picked);
       }
       setState(() {
-        _expandedItems.add(itemName); // Auto-expand when a new date is added
+        _expandedItems.add(itemName);
       });
     }
   }
@@ -73,7 +70,6 @@ class _ExpiryManagementScreenState extends State<ExpiryManagementScreen> {
   Widget build(BuildContext context) {
     final displayList = context.watch<PantryProvider>().savedIngredients;
 
-    // Sort so the ingredient they swiped on stays at the very top of the list
     List<MapEntry<String, PantryItem>> sortedList = List.from(displayList);
     if (widget.targetIngredient != null) {
       sortedList.sort((a, b) {
@@ -87,7 +83,7 @@ class _ExpiryManagementScreenState extends State<ExpiryManagementScreen> {
       backgroundColor: const Color(0xFFF8FAF8),
       appBar: AppBar(
         title: const Text(
-          "Expiry Dates",
+          "Freshness Tracker",
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: Color(0xFF006E1C),
@@ -97,19 +93,142 @@ class _ExpiryManagementScreenState extends State<ExpiryManagementScreen> {
         ),
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 0,
+        scrolledUnderElevation: 0,
         iconTheme: const IconThemeData(color: Color(0xFF191C1B)),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        itemCount: sortedList.length,
-        itemBuilder: (context, index) {
-          final entry = sortedList[index];
-          final String itemName = entry.key;
-          final PantryItem pantryItem = entry.value;
-          final bool isExpanded = _expandedItems.contains(itemName);
+      body: displayList.isEmpty
+          ? _buildEmptyState()
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              // We add 1 to the item count to make room for the header at the top
+              itemCount: sortedList.length + 1,
+              itemBuilder: (context, index) {
+                // --- INDEX 0: THE HEADER (NOW SCROLLS AWAY!) ---
+                if (index == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF006E1C), Color(0xFF0A4F1A)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF006E1C).withOpacity(0.3),
+                            blurRadius: 16,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.kitchen,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Pantry Health",
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  "Keep track of your ingredients so nothing goes to waste.",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
 
-          return _buildExpiryCard(context, itemName, pantryItem, isExpanded);
-        },
+                // --- INDEX 1+: THE INGREDIENT LIST ---
+                // We subtract 1 from the index so the list data matches up perfectly
+                final entry = sortedList[index - 1];
+                return _buildExpiryCard(
+                  context,
+                  entry.key,
+                  entry.value,
+                  _expandedItems.contains(entry.key),
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.event_busy,
+              size: 64,
+              color: Color(0xFFBECAB9),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            "No items to track",
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF191C1B),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            "Add ingredients to your pantry first\nto start tracking their expiry dates.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF6F7A6B),
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -121,8 +240,46 @@ class _ExpiryManagementScreenState extends State<ExpiryManagementScreen> {
     bool isExpanded,
   ) {
     List<DateTime> dates = pantryItem.expiryDates;
-    // Dates are pre-sorted by the provider, so index 0 is always the closest!
     DateTime? closestDate = dates.isNotEmpty ? dates.first : null;
+
+    // Smart UI Data calculation
+    String statusText = "No dates tracked";
+    Color statusColor = Colors.grey.shade400;
+    IconData statusIcon = Icons.help_outline;
+
+    if (closestDate != null) {
+      // Calculate midnight-to-midnight difference
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final expiry = DateTime(
+        closestDate.year,
+        closestDate.month,
+        closestDate.day,
+      );
+      final int daysLeft = expiry.difference(today).inDays;
+
+      if (daysLeft < 0) {
+        statusText = "Expired";
+        statusColor = Colors.redAccent;
+        statusIcon = Icons.warning_amber_rounded;
+      } else if (daysLeft == 0) {
+        statusText = "Expires Today!";
+        statusColor = Colors.redAccent;
+        statusIcon = Icons.error_outline;
+      } else if (daysLeft <= 3) {
+        statusText = "Expires in $daysLeft days";
+        statusColor = Colors.redAccent;
+        statusIcon = Icons.error_outline;
+      } else if (daysLeft <= 7) {
+        statusText = "Expires in $daysLeft days";
+        statusColor = const Color(0xFFD78A1F);
+        statusIcon = Icons.schedule;
+      } else {
+        statusText = "Expires in $daysLeft days";
+        statusColor = const Color(0xFF006E1C);
+        statusIcon = Icons.check_circle_outline;
+      }
+    }
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -139,8 +296,9 @@ class _ExpiryManagementScreenState extends State<ExpiryManagementScreen> {
         ],
         border: Border.all(
           color: isExpanded
-              ? const Color(0xFF006E1C).withOpacity(0.3)
+              ? statusColor.withOpacity(0.3)
               : Colors.grey.shade100,
+          width: isExpanded ? 2 : 1,
         ),
       ),
       child: InkWell(
@@ -159,14 +317,13 @@ class _ExpiryManagementScreenState extends State<ExpiryManagementScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- TOP ROW: Image, Name, Add Button ---
               Row(
                 children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     child: SizedBox(
-                      width: 50,
-                      height: 50,
+                      width: 56,
+                      height: 56,
                       child: Builder(
                         builder: (context) {
                           String? imageUrl = context
@@ -192,153 +349,166 @@ class _ExpiryManagementScreenState extends State<ExpiryManagementScreen> {
                   ),
                   const SizedBox(width: 16),
                   Expanded(
-                    child: Text(
-                      itemName,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF191C1B),
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          itemName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF191C1B),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        // --- UPGRADED SMART BADGE ---
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(statusIcon, size: 14, color: statusColor),
+                              const SizedBox(width: 4),
+                              Text(
+                                statusText,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: statusColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.add_circle,
-                      color: Color(0xFFD78A1F),
-                      size: 32,
-                    ), // Orange Add Button
-                    onPressed: () => _addOrEditDate(context, itemName),
+                  // Sleek Action Button
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF006E1C).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.add,
+                        color: Color(0xFF006E1C),
+                        size: 24,
+                      ),
+                      onPressed: () => _addOrEditDate(context, itemName),
+                    ),
                   ),
                 ],
               ),
 
-              // --- BOTTOM ROW / EXPANDED SECTION ---
-              if (dates.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(
-                    "No expiry dates added.",
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-                  ),
-                )
-              else if (!isExpanded && closestDate != null)
-                // Collapsed State: Just show the closest date
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.event_busy,
-                        size: 16,
-                        color: Color(0xFFD78A1F),
+              if (isExpanded && dates.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Divider(color: Color(0xFFF2F4F2), thickness: 1.5),
+                const SizedBox(height: 8),
+                Column(
+                  children: dates.map((date) {
+                    bool isClosest = date == closestDate;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        "Closest Expiry: ${DateFormat('dd MMM yyyy').format(closestDate)}",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFFD78A1F),
-                        ),
-                      ),
-                      const Spacer(),
-                      const Icon(Icons.expand_more, color: Colors.grey),
-                    ],
-                  ),
-                )
-              else if (isExpanded)
-                // Expanded State: Show all dates with edit/delete actions
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Column(
-                    children: dates.map((date) {
-                      bool isClosest = date == closestDate;
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
+                      decoration: BoxDecoration(
+                        color: isClosest
+                            ? statusColor.withOpacity(0.05)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
                           color: isClosest
-                              ? const Color(0xFFD78A1F).withOpacity(0.1)
-                              : Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isClosest
-                                ? const Color(0xFFD78A1F).withOpacity(0.3)
-                                : Colors.transparent,
-                          ),
+                              ? statusColor.withOpacity(0.3)
+                              : Colors.grey.shade200,
                         ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.calendar_today,
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isClosest
+                                  ? statusColor.withOpacity(0.1)
+                                  : Colors.grey.shade100,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.event,
                               size: 16,
                               color: isClosest
-                                  ? const Color(0xFFD78A1F)
+                                  ? statusColor
                                   : Colors.grey.shade600,
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              DateFormat('dd MMM yyyy').format(date),
-                              style: TextStyle(
-                                fontWeight: isClosest
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                color: isClosest
-                                    ? const Color(0xFFD78A1F)
-                                    : const Color(0xFF191C1B),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                DateFormat('dd MMM yyyy').format(date),
+                                style: TextStyle(
+                                  fontWeight: isClosest
+                                      ? FontWeight.bold
+                                      : FontWeight.w600,
+                                  fontSize: 15,
+                                  color: const Color(0xFF191C1B),
+                                ),
                               ),
-                            ),
-                            if (isClosest)
-                              const Padding(
-                                padding: EdgeInsets.only(left: 8),
-                                child: Text(
-                                  "(Closest)",
+                              if (isClosest)
+                                Text(
+                                  "Tracking next expiry",
                                   style: TextStyle(
-                                    fontSize: 10,
-                                    color: Color(0xFFD78A1F),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: statusColor,
                                   ),
                                 ),
-                              ),
-                            const Spacer(),
-                            // Edit
-                            InkWell(
-                              onTap: () => _addOrEditDate(
-                                context,
-                                itemName,
-                                oldDate: date,
-                              ),
-                              child: const Padding(
-                                padding: EdgeInsets.all(4),
-                                child: Icon(
-                                  Icons.edit,
-                                  size: 20,
-                                  color: Colors.blue,
-                                ),
-                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.edit_calendar,
+                              size: 20,
+                              color: Color(0xFF6F7A6B),
                             ),
-                            const SizedBox(width: 12),
-                            // Delete
-                            InkWell(
-                              onTap: () => context
-                                  .read<PantryProvider>()
-                                  .removeExpiryDate(itemName, date),
-                              child: const Padding(
-                                padding: EdgeInsets.all(4),
-                                child: Icon(
-                                  Icons.delete,
-                                  size: 20,
-                                  color: Colors.redAccent,
-                                ),
-                              ),
+                            onPressed: () => _addOrEditDate(
+                              context,
+                              itemName,
+                              oldDate: date,
                             ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 16),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 20,
+                              color: Colors.redAccent,
+                            ),
+                            onPressed: () => context
+                                .read<PantryProvider>()
+                                .removeExpiryDate(itemName, date),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
                 ),
+              ],
             ],
           ),
         ),

@@ -88,6 +88,7 @@ class AIRecipeService {
           2. DO NOT invent, suggest, or use ANY outside ingredients (e.g. no olive oil, no black pepper, no butter) unless it is on the allowed list. 
           3. You MUST return ONLY the raw ingredient names in UPPERCASE exactly as they appear in the list.
           4. DO NOT include quantities or measurements in the ingredients array.
+          5. Instructions MUST be in English but the ingredients are in Malay.
           
           You MUST respond in valid JSON using EXACTLY this schema:
           {
