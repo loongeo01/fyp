@@ -1,10 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // <-- NEW: Imported Provider
+import 'package:provider/provider.dart';
 import 'package:recipe_app/main.dart';
-import 'package:recipe_app/pantry_provider.dart'; // <-- NEW: Imported PantryProvider
+import 'package:recipe_app/pantry_provider.dart';
 import 'package:recipe_app/premium_recipe_card.dart';
+import 'package:recipe_app/all_recipes_screen.dart'; // <-- NEW: Import the new screen
 
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
@@ -20,7 +21,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
   @override
   void initState() {
     super.initState();
-    // Use Future.microtask to ensure context is ready for Provider
     Future.microtask(() => _fetchFavoriteRecipes());
   }
 
@@ -82,8 +82,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
 
       if (!mounted) return;
 
-      // --- NEW: CALCULATE MATCH STATS BEFORE DISPLAYING ---
-      // 1. Get the user's current pantry inventory
       Set<String> myPantry = context
           .read<PantryProvider>()
           .savedIngredients
@@ -92,7 +90,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
 
       List<Map<String, dynamic>> processedRecipes = [];
 
-      // 2. Cross-reference each favorite recipe with the pantry
       for (var recipe in matchedRecipes) {
         List<dynamic> rawIngredients = recipe['ingredients'] ?? [];
         int matchCount = 0;
@@ -106,7 +103,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
         int totalNeeded = rawIngredients.length;
         int missingCount = totalNeeded - matchCount;
 
-        // 3. Inject the data into the recipe map so the PremiumCard can read it!
         processedRecipes.add({
           ...recipe,
           "matchCount": matchCount,
@@ -143,6 +139,26 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
+        // --- NEW: ADDED ACTION BUTTON HERE ---
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.food_bank,
+              size: 32,
+              color: Color(0xFF006E1C),
+            ),
+            tooltip: "View All Recipes",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AllRecipesScreen(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: _isLoading
           ? const Center(
