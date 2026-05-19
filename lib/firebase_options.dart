@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -28,15 +25,9 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -50,7 +41,7 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAzZAR9FwfPrmNnbwkYSU4ao65St-0vzgA',
+    apiKey: 'AIzaSyCDn50GZPcsSit2hD1W14Mhl2Y6Nz2eQ1Q',
     appId: '1:658191778895:android:ce4ab2ad0618c42b17d63a',
     messagingSenderId: '658191778895',
     projectId: 'ai-pantry-my-86ad3',
@@ -67,4 +58,35 @@ class DefaultFirebaseOptions {
     storageBucket: 'ai-pantry-my-86ad3.firebasestorage.app',
     iosBundleId: 'com.example.recipeApp',
   );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyA-WnMFZvACW98u5wRGMpTMmhM7Om6QxkQ',
+    appId: '1:658191778895:web:19fd8cd2ac491a4717d63a',
+    messagingSenderId: '658191778895',
+    projectId: 'ai-pantry-my-86ad3',
+    authDomain: 'ai-pantry-my-86ad3.firebaseapp.com',
+    databaseURL: 'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'ai-pantry-my-86ad3.firebasestorage.app',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyCGb8Y-MbwIRkYSDQ0jeBYcHAtb55WGq5I',
+    appId: '1:658191778895:ios:5bb6727e36e5198817d63a',
+    messagingSenderId: '658191778895',
+    projectId: 'ai-pantry-my-86ad3',
+    databaseURL: 'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'ai-pantry-my-86ad3.firebasestorage.app',
+    iosBundleId: 'com.example.recipeApp',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyA-WnMFZvACW98u5wRGMpTMmhM7Om6QxkQ',
+    appId: '1:658191778895:web:9011b86a2a7f652617d63a',
+    messagingSenderId: '658191778895',
+    projectId: 'ai-pantry-my-86ad3',
+    authDomain: 'ai-pantry-my-86ad3.firebaseapp.com',
+    databaseURL: 'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'ai-pantry-my-86ad3.firebasestorage.app',
+  );
+
 }

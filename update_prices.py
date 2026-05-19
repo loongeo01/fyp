@@ -6,6 +6,19 @@ import io
 import time
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import os
+from dotenv import load_dotenv
+
+# This line magically finds your .env file and loads the variables into os.environ
+# If the .env file doesn't exist (like on GitHub Actions), it just quietly skips it!
+load_dotenv() 
+
+# Now we fetch the key. 
+# Locally, it grabs it from the .env file. On GitHub, it grabs it from GitHub Secrets!
+api_key = os.environ.get("googleApiKey")
+
+if not api_key:
+    raise ValueError("Google API Key is missing!")
 
 #  Setup
 print("Connecting to Firebase...")
