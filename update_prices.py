@@ -110,7 +110,7 @@ filtered_df = merged_df[
 # Google
 GOOGLE_API_KEY = "AIzaSyAzZAR9FwfPrmNnbwkYSU4ao65St-0vzgA"
 
-def get_google_gps(store_name, address, sta=te):
+def get_google_gps(store_name, address, state):
     clean_address = str(address).replace(',,', ',').strip()
     if clean_address.endswith(','):
         clean_address = clean_address[:-1]
