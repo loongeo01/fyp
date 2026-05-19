@@ -157,7 +157,10 @@ class _PantryRecipesScreenState extends State<PantryRecipesScreen> {
                   strokeWidth: 2,
                 ),
               )
-            : const Icon(Icons.auto_awesome, color: Colors.white),
+            : const Icon(
+                Icons.emoji_food_beverage_rounded,
+                color: Colors.white,
+              ),
         label: Text(
           isThinking ? "Chef is cooking..." : "Generate More",
           style: const TextStyle(

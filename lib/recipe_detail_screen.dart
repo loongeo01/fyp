@@ -335,7 +335,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // --- NEW: SHOP MISSING ITEMS BUTTON ---
+                  // --- SHOP MISSING ITEMS BUTTON ---
                   if (missingIngredients.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.only(right: 12.0),
@@ -462,23 +462,60 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                               ],
                             ),
                           ),
-                          // Optional: Keep individual search button for missing items just in case
+                          // --- ADDED BUTTONS FOR MISSING ITEMS ---
                           if (!iHaveThis)
-                            IconButton(
-                              icon: const Icon(
-                                Icons.search,
-                                color: Color(0xFF006E1C),
-                              ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => IngredientPrices(
-                                      ingredientName: ingredient.toString(),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  // --- UPDATED: BADGE ADDED HERE ---
+                                  icon: Badge(
+                                    label: const Text(
+                                      '+',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w900,
+                                        color: Color.fromARGB(
+                                          255,
+                                          110,
+                                          113,
+                                          23,
+                                        ),
+                                      ),
+                                    ),
+                                    backgroundColor:
+                                        Colors.transparent, // App Green
+                                    offset: const Offset(6, -7),
+                                    child: const Icon(
+                                      Icons.kitchen,
+                                      color: Color(0xFFD78A1F),
                                     ),
                                   ),
-                                );
-                              },
+                                  tooltip: "Add to Pantry",
+                                  onPressed: () {
+                                    context
+                                        .read<PantryProvider>()
+                                        .addIngredient(currentItem);
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.search,
+                                    color: Color(0xFF006E1C),
+                                  ),
+                                  tooltip: "Compare Prices",
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => IngredientPrices(
+                                          ingredientName: ingredient.toString(),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                         ],
                       ),

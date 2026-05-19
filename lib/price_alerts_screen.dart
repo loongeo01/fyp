@@ -464,11 +464,6 @@ class _PriceAlertsScreenState extends State<PriceAlertsScreen> {
                               const SizedBox(height: 6),
                               Row(
                                 children: [
-                                  Icon(
-                                    Icons.trending_down,
-                                    size: 14,
-                                    color: const Color(0xFFD78A1F),
-                                  ),
                                   const SizedBox(width: 4),
                                   Text(
                                     "Target: RM ${price.toStringAsFixed(2)}",

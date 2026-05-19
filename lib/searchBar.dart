@@ -8,6 +8,7 @@ class IngredientSearchBar extends StatefulWidget {
   final String hintText;
   final bool havePlusButton;
   final String defaultText;
+  final List<String>? customSuggestions; // --- NEW: Optional custom list
 
   const IngredientSearchBar({
     super.key,
@@ -16,6 +17,7 @@ class IngredientSearchBar extends StatefulWidget {
     this.defaultText = "",
     this.hintText = "Type an ingredient...",
     this.havePlusButton = true,
+    this.customSuggestions, // --- NEW: Optional custom list
   });
 
   @override
@@ -23,23 +25,24 @@ class IngredientSearchBar extends StatefulWidget {
 }
 
 class _IngredientSearchBarState extends State<IngredientSearchBar> {
-  // REMOVED: Static _pantryDatabase list is gone!
-
   @override
   Widget build(BuildContext context) {
-    final dynamicSuggestions = context
-        .watch<PantryProvider>()
-        .masterIngredients
-        .map((item) => item['name'].toString())
-        .toList();
+    // --- NEW: Use the custom list if provided, otherwise default to the PantryProvider ---
+    final List<String> dynamicSuggestions =
+        widget.customSuggestions ??
+        context
+            .watch<PantryProvider>()
+            .masterIngredients
+            .map((item) => item['name'].toString())
+            .toList();
 
     return Autocomplete<String>(
-      // NEW: When a user clicks a suggestion from the dropdown
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
           return const Iterable<String>.empty();
         }
-        // Use the dynamic list passed from the parent!
+
+        // Uses whichever list was decided above
         return dynamicSuggestions.where((String option) {
           return option.toLowerCase().contains(
             textEditingValue.text.toLowerCase(),

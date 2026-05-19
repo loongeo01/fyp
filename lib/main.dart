@@ -4,26 +4,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:recipe_app/app_images.dart';
 import 'package:recipe_app/favorites_screen.dart';
 import 'package:recipe_app/ingredient_prices.dart';
 import 'package:recipe_app/pantry_screen.dart';
 import 'package:recipe_app/premium_ingredient_wrap.dart';
 import 'package:recipe_app/premium_recipe_card.dart';
-import 'package:recipe_app/recipe_detail_screen.dart';
 import 'package:recipe_app/searchBar.dart';
 
 import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_screen.dart';
 
 import 'package:provider/provider.dart';
 import 'pantry_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 import 'dart:convert';
 import 'package:firebase_vertexai/firebase_vertexai.dart';
@@ -247,7 +242,7 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen>
             Icon(Icons.eco, color: Color(0xFF006E1C), size: 28),
             SizedBox(width: 8),
             Text(
-              "FreshMarket AI",
+              "Kitchin",
               style: TextStyle(
                 color: Color(0xFF006E1C),
                 fontWeight: FontWeight.bold,

@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'notification_service.dart';
 
 class PantryItem {
-  int quantity;
+  double quantity;
   List<DateTime> expiryDates;
 
   PantryItem({required this.quantity, List<DateTime>? expiryDates})
@@ -19,7 +19,8 @@ class PantryItem {
 
   factory PantryItem.fromMap(Map<String, dynamic> map) {
     return PantryItem(
-      quantity: map['quantity'] ?? 1,
+      // Safely handle both int and double coming from Firestore
+      quantity: (map['quantity'] as num?)?.toDouble() ?? 1.0,
       expiryDates:
           (map['expiryDates'] as List<dynamic>?)
               ?.map((d) => DateTime.parse(d.toString()))
@@ -136,8 +137,9 @@ class PantryProvider extends ChangeNotifier {
         if (data.containsKey('pantry')) {
           Map<String, dynamic> rawPantry = data['pantry'];
           _savedIngredients = rawPantry.map((key, value) {
-            if (value is int) {
-              return MapEntry(key, PantryItem(quantity: value));
+            // Check for num instead of just int to capture both ints and doubles safely
+            if (value is num) {
+              return MapEntry(key, PantryItem(quantity: value.toDouble()));
             } else {
               return MapEntry(
                 key,
@@ -296,10 +298,33 @@ class PantryProvider extends ChangeNotifier {
 
   void addIngredient(String item) {
     if (_savedIngredients.containsKey(item)) {
-      _savedIngredients[item]!.quantity += 1;
+      // If it's already in the pantry, just add 1 to the current stack
+      _savedIngredients[item]!.quantity += 1.0;
     } else {
-      _savedIngredients[item] = PantryItem(quantity: 1);
+      // --- NEW: Calculate the starting quantity from Firebase data ---
+      double startingQty = 1.0; // Changed to double
+
+      try {
+        // Find the ingredient in the master list to get its unit string
+        final match = _masterIngredients.firstWhere(
+          (masterItem) =>
+              masterItem['name'].toString().toUpperCase() == item.toUpperCase(),
+        );
+        String rawUnit = match['unit']?.toString() ?? "";
+
+        // Extract numbers (now supporting decimals like "1.5 kg")
+        final numberMatch = RegExp(r'\d+(\.\d+)?').firstMatch(rawUnit);
+        if (numberMatch != null) {
+          startingQty = double.parse(numberMatch.group(0)!);
+        }
+      } catch (e) {
+        // If not found or regex fails, it defaults safely to 1.0
+      }
+
+      // Add the item to the pantry with the extracted starting quantity
+      _savedIngredients[item] = PantryItem(quantity: startingQty);
     }
+
     notifyListeners();
     _syncToFirebase();
   }
@@ -310,9 +335,14 @@ class PantryProvider extends ChangeNotifier {
     _syncToFirebase();
   }
 
-  void updateQuantity(String item, int change) {
+  void updateQuantity(String item, double change) {
     if (_savedIngredients.containsKey(item)) {
-      _savedIngredients[item]!.quantity += change;
+      // Make sure the resulting quantity doesn't suffer from floating-point errors (e.g., 1.99999999)
+      double newQuantity = _savedIngredients[item]!.quantity + change;
+      newQuantity = double.parse(newQuantity.toStringAsFixed(2));
+
+      _savedIngredients[item]!.quantity = newQuantity;
+
       if (_savedIngredients[item]!.quantity <= 0) {
         _savedIngredients.remove(item);
       }

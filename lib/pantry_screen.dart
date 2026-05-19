@@ -1,13 +1,14 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart'; // NEW
+import 'package:intl/intl.dart';
 import 'package:recipe_app/app_images.dart';
 import 'package:recipe_app/ingredient_prices.dart';
 import 'package:recipe_app/pantry_recipes_screen.dart';
 import 'package:recipe_app/searchBar.dart';
 import 'pantry_provider.dart';
-import 'expiry_management_screen.dart'; // NEW
+import 'expiry_management_screen.dart';
+import 'dart:async';
 
 class PantryScreen extends StatefulWidget {
   const PantryScreen({super.key});
@@ -19,6 +20,51 @@ class PantryScreen extends StatefulWidget {
 class _PantryScreenState extends State<PantryScreen> {
   bool _isSelectionMode = false;
   final Set<String> _selectedItems = {};
+  Timer? _pressTimer;
+  int _tickCount = 0;
+
+  void _startContinuousUpdate(
+    BuildContext context,
+    String itemName,
+    double baseChange, // Changed to double
+  ) {
+    // Initial single tap update
+    context.read<PantryProvider>().updateQuantity(itemName, baseChange);
+    _tickCount = 0;
+
+    // Small delay (400ms) before rapid fire starts
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (_pressTimer != null) return;
+      _pressTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+        if (!mounted) return;
+        _tickCount++;
+
+        // ACCELERATION LOGIC: Increases the amount added the longer they hold
+        int multiplier = 1;
+        if (_tickCount > 20) {
+          multiplier = 10; // After 2 seconds, jump by 10s
+        } else if (_tickCount > 10) {
+          multiplier = 5; // After 1 second, jump by 5s
+        }
+
+        context.read<PantryProvider>().updateQuantity(
+          itemName,
+          baseChange * multiplier,
+        );
+      });
+    });
+  }
+
+  void _stopContinuousUpdate() {
+    _pressTimer?.cancel();
+    _pressTimer = null;
+    _tickCount = 0;
+  }
+
+  // --- Helper function to strip numbers from Firebase units ---
+  String extractCleanUnit(String rawUnit) {
+    return rawUnit.replaceAll(RegExp(r'\d+'), '').trim();
+  }
 
   void _toggleSelection(String itemName) {
     setState(() {
@@ -44,7 +90,6 @@ class _PantryScreenState extends State<PantryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // UPGRADED: provider now returns a PantryItem object instead of an int
     final rawIngredients = context.watch<PantryProvider>().savedIngredients;
     final displayList = context.watch<PantryProvider>().filteredIngredients;
 
@@ -197,8 +242,6 @@ class _PantryScreenState extends State<PantryScreen> {
                         direction: _isSelectionMode
                             ? DismissDirection.none
                             : DismissDirection.horizontal,
-
-                        // SWIPE RIGHT (startToEnd) -> DELETE
                         background: Container(
                           decoration: BoxDecoration(
                             color: Colors.redAccent,
@@ -212,8 +255,6 @@ class _PantryScreenState extends State<PantryScreen> {
                             size: 32,
                           ),
                         ),
-
-                        // SWIPE LEFT (endToStart) -> ADD EXPIRY
                         secondaryBackground: Container(
                           decoration: BoxDecoration(
                             color: const Color(0xFFD78A1F),
@@ -227,10 +268,8 @@ class _PantryScreenState extends State<PantryScreen> {
                             size: 32,
                           ),
                         ),
-
                         confirmDismiss: (direction) async {
                           if (direction == DismissDirection.endToStart) {
-                            // Prevent deletion, route to new screen instead!
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -241,7 +280,7 @@ class _PantryScreenState extends State<PantryScreen> {
                             );
                             return false;
                           }
-                          return true; // Swipe right allows standard deletion
+                          return true;
                         },
                         onDismissed: (direction) {
                           if (direction == DismissDirection.startToEnd) {
@@ -259,7 +298,6 @@ class _PantryScreenState extends State<PantryScreen> {
       ),
       floatingActionButton: rawIngredients.isNotEmpty
           ? FloatingActionButton(
-              // <-- Changed back to standard (not .extended)
               backgroundColor: _isSelectionMode
                   ? (_selectedItems.isNotEmpty
                         ? const Color(0xFFD78A1F)
@@ -269,7 +307,6 @@ class _PantryScreenState extends State<PantryScreen> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
-              // <-- Just the child icon, no label!
               child: const Icon(Icons.menu_book, color: Colors.white, size: 28),
               onPressed: () {
                 if (_isSelectionMode && _selectedItems.isEmpty) return;
@@ -303,7 +340,6 @@ class _PantryScreenState extends State<PantryScreen> {
   ) {
     bool isSelected = _selectedItems.contains(itemName);
 
-    // --- SMART DATE LOGIC ---
     DateTime? closestDate = pantryItem.expiryDates.isNotEmpty
         ? pantryItem.expiryDates.first
         : null;
@@ -345,7 +381,6 @@ class _PantryScreenState extends State<PantryScreen> {
       }
     }
 
-    // --- FETCH THE UNIT FROM FIREBASE DATA ---
     String itemUnit = "";
     try {
       final masterList = context.read<PantryProvider>().masterIngredients;
@@ -358,15 +393,12 @@ class _PantryScreenState extends State<PantryScreen> {
       itemUnit = "";
     }
 
-    // NEW: We only display the unit text here, with a fallback!
     String displayUnit = itemUnit.isNotEmpty ? itemUnit : "pcs";
 
-    // --- UPGRADED BULLETPROOF LAYOUT: STACK ---
     return Stack(
       alignment: Alignment.topLeft,
       clipBehavior: Clip.none,
       children: [
-        // 1. THE MAIN CARD
         Container(
           margin: const EdgeInsets.only(bottom: 14),
           decoration: BoxDecoration(
@@ -463,14 +495,16 @@ class _PantryScreenState extends State<PantryScreen> {
                       Expanded(
                         flex: 5,
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+                          // Reserve space for the taller stepper below
+                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 72),
                           child: Column(
+                            mainAxisAlignment: MainAxisAlignment.start,
                             children: [
                               Text(
                                 itemName,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF191C1B),
                                   height: 1.2,
@@ -505,11 +539,11 @@ class _PantryScreenState extends State<PantryScreen> {
 
                   if (!_isSelectionMode)
                     Positioned(
-                      bottom: 12,
-                      left: 12,
-                      right: 12,
+                      bottom: 8,
+                      left: 6,
+                      right: 6,
                       child: Container(
-                        height: 50,
+                        height: 64,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
@@ -528,20 +562,29 @@ class _PantryScreenState extends State<PantryScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
+                            // --- MINUS BUTTON ---
                             Expanded(
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: const BorderRadius.horizontal(
-                                    left: Radius.circular(20),
-                                  ),
-                                  onTap: () => context
-                                      .read<PantryProvider>()
-                                      .updateQuantity(itemName, -1),
+                              child: GestureDetector(
+                                onTap: () => context
+                                    .read<PantryProvider>()
+                                    .updateQuantity(
+                                      itemName,
+                                      -1.0,
+                                    ), // Pass double
+                                onLongPressStart: (_) => _startContinuousUpdate(
+                                  context,
+                                  itemName,
+                                  -1.0, // Pass double
+                                ),
+                                onLongPressEnd: (_) => _stopContinuousUpdate(),
+                                onLongPressCancel: () =>
+                                    _stopContinuousUpdate(),
+                                child: Container(
+                                  color: Colors.transparent,
                                   child: const Center(
                                     child: Icon(
                                       Icons.remove,
-                                      size: 20,
+                                      size: 26,
                                       color: Color(0xFF006E1C),
                                     ),
                                   ),
@@ -549,35 +592,37 @@ class _PantryScreenState extends State<PantryScreen> {
                               ),
                             ),
 
-                            // --- NEW: THE QUANTITY IS BACK IN THE CENTER ---
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              child: Text(
-                                "${pantryItem.quantity}",
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w900,
-                                  color: Color(0xFF191C1B),
-                                ),
-                              ),
+                            // --- INLINE EDITABLE QUANTITY ---
+                            _InlineQuantityEditor(
+                              itemName: itemName,
+                              quantity: pantryItem.quantity
+                                  .toDouble(), // Ensure passing a double
+                              unit: extractCleanUnit(displayUnit),
                             ),
 
+                            // --- PLUS BUTTON ---
                             Expanded(
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: const BorderRadius.horizontal(
-                                    right: Radius.circular(20),
-                                  ),
-                                  onTap: () => context
-                                      .read<PantryProvider>()
-                                      .updateQuantity(itemName, 1),
+                              child: GestureDetector(
+                                onTap: () => context
+                                    .read<PantryProvider>()
+                                    .updateQuantity(
+                                      itemName,
+                                      1.0,
+                                    ), // Pass double
+                                onLongPressStart: (_) => _startContinuousUpdate(
+                                  context,
+                                  itemName,
+                                  1.0, // Pass double
+                                ),
+                                onLongPressEnd: (_) => _stopContinuousUpdate(),
+                                onLongPressCancel: () =>
+                                    _stopContinuousUpdate(),
+                                child: Container(
+                                  color: Colors.transparent,
                                   child: const Center(
                                     child: Icon(
                                       Icons.add,
-                                      size: 20,
+                                      size: 26,
                                       color: Color(0xFF006E1C),
                                     ),
                                   ),
@@ -627,28 +672,130 @@ class _PantryScreenState extends State<PantryScreen> {
               ),
             ),
           ),
+      ],
+    );
+  }
+}
 
-        // 2. THE HANGING UNIT TAG
-        Positioned(
-          top: -10,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color.fromARGB(255, 121, 193, 139),
-              borderRadius: BorderRadius.circular(7), // Premium Pill Shape
-            ),
-            child: Text(
-              displayUnit, // <-- Only shows "kg", "ekor", etc.
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 12,
-                letterSpacing: 0.5,
-              ),
-            ),
+class _InlineQuantityEditor extends StatefulWidget {
+  final String itemName;
+  final double quantity; // Changed to double
+  final String unit;
+
+  const _InlineQuantityEditor({
+    required this.itemName,
+    required this.quantity,
+    required this.unit,
+  });
+
+  @override
+  State<_InlineQuantityEditor> createState() => _InlineQuantityEditorState();
+}
+
+class _InlineQuantityEditorState extends State<_InlineQuantityEditor> {
+  late TextEditingController _controller;
+  late FocusNode _focusNode;
+  bool _isEditing = false;
+
+  // Helper to drop ".0" if the number is whole (e.g., 2.0 -> "2")
+  String get formattedQuantity {
+    return widget.quantity == widget.quantity.truncateToDouble()
+        ? widget.quantity.toInt().toString()
+        : widget.quantity.toString();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+    _focusNode = FocusNode();
+    _focusNode.addListener(() {
+      if (!_focusNode.hasFocus && _isEditing) {
+        _commitEdit();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(_InlineQuantityEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Keep display in sync when +/- buttons change quantity externally
+    if (!_isEditing) {
+      _controller.text = formattedQuantity;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _startEditing() {
+    setState(() {
+      _isEditing = true;
+      _controller.text = formattedQuantity;
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controller.text.length,
+      );
+    });
+    _focusNode.requestFocus();
+  }
+
+  void _commitEdit() {
+    // Switched to double.tryParse to allow decimals
+    final double? newQty = double.tryParse(_controller.text.trim());
+    if (newQty != null && newQty >= 0) {
+      final double diff = newQty - widget.quantity;
+      if (diff != 0) {
+        context.read<PantryProvider>().updateQuantity(widget.itemName, diff);
+      }
+    }
+    setState(() => _isEditing = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isEditing) {
+      return SizedBox(
+        width: 80,
+        child: TextField(
+          controller: _controller,
+          focusNode: _focusNode,
+          keyboardType: const TextInputType.numberWithOptions(
+            decimal: true,
+          ), // Enable decimal keyboard
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF191C1B),
+          ),
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(vertical: 8),
+          ),
+          onSubmitted: (_) => _commitEdit(),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: _startEditing,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        child: Text(
+          "$formattedQuantity ${widget.unit}", // Uses the clean formatter
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF191C1B),
           ),
         ),
-      ],
+      ),
     );
   }
 }

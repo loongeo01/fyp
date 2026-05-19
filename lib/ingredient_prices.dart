@@ -58,7 +58,7 @@ class _IngredientPricesState extends State<IngredientPrices> {
         _basket.insert(0, cleanItem);
         _isLoading = true;
       });
-      _fetchStorePricesFromFirebase();
+      _fetchStorePrices();
     }
   }
 
@@ -73,7 +73,7 @@ class _IngredientPricesState extends State<IngredientPrices> {
       }
     });
     if (_basket.isNotEmpty) {
-      _fetchStorePricesFromFirebase();
+      _fetchStorePrices();
     }
   }
 
@@ -117,7 +117,7 @@ class _IngredientPricesState extends State<IngredientPrices> {
       Position position = await Geolocator.getCurrentPosition();
       _userPosition = position;
       if (_basket.isNotEmpty) {
-        await _fetchStorePricesFromFirebase();
+        await _fetchStorePrices();
       } else {
         setState(() => _isLoading = false);
       }
@@ -130,7 +130,7 @@ class _IngredientPricesState extends State<IngredientPrices> {
     }
   }
 
-  Future<void> _fetchStorePricesFromFirebase() async {
+  Future<void> _fetchStorePrices() async {
     if (!mounted) return;
 
     setState(() {
@@ -216,7 +216,7 @@ class _IngredientPricesState extends State<IngredientPrices> {
         int foundCount = 0;
         List<String> missingItems = [];
 
-        // RE-ADDED: Fetching breakdown for UI
+        // Fetching breakdown for UI
         List<Map<String, dynamic>> foundItems = [];
 
         for (String item in _basket) {
@@ -421,7 +421,7 @@ class _IngredientPricesState extends State<IngredientPrices> {
                                 _selectedLocation = newValue;
                                 _isLoading = true;
                               });
-                              _fetchStorePricesFromFirebase();
+                              _fetchStorePrices();
                             }
                           },
                         ),
