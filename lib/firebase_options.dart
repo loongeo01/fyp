@@ -4,16 +4,6 @@ import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
-/// Default [FirebaseOptions] for use with your Firebase apps.
-///
-/// Example:
-/// ```dart
-/// import 'firebase_options.dart';
-/// // ...
-/// await Firebase.initializeApp(
-///   options: DefaultFirebaseOptions.currentPlatform,
-/// );
-/// ```
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -45,7 +35,8 @@ class DefaultFirebaseOptions {
     appId: '1:658191778895:android:ce4ab2ad0618c42b17d63a',
     messagingSenderId: '658191778895',
     projectId: 'ai-pantry-my-86ad3',
-    databaseURL: 'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'ai-pantry-my-86ad3.firebasestorage.app',
   );
 
@@ -54,7 +45,8 @@ class DefaultFirebaseOptions {
     appId: '1:658191778895:ios:5bb6727e36e5198817d63a',
     messagingSenderId: '658191778895',
     projectId: 'ai-pantry-my-86ad3',
-    databaseURL: 'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'ai-pantry-my-86ad3.firebasestorage.app',
     iosBundleId: 'com.example.recipeApp',
   );
@@ -65,7 +57,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '658191778895',
     projectId: 'ai-pantry-my-86ad3',
     authDomain: 'ai-pantry-my-86ad3.firebaseapp.com',
-    databaseURL: 'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'ai-pantry-my-86ad3.firebasestorage.app',
   );
 
@@ -74,7 +67,8 @@ class DefaultFirebaseOptions {
     appId: '1:658191778895:ios:5bb6727e36e5198817d63a',
     messagingSenderId: '658191778895',
     projectId: 'ai-pantry-my-86ad3',
-    databaseURL: 'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'ai-pantry-my-86ad3.firebasestorage.app',
     iosBundleId: 'com.example.recipeApp',
   );
@@ -85,8 +79,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '658191778895',
     projectId: 'ai-pantry-my-86ad3',
     authDomain: 'ai-pantry-my-86ad3.firebaseapp.com',
-    databaseURL: 'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://ai-pantry-my-86ad3-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'ai-pantry-my-86ad3.firebasestorage.app',
   );
-
 }

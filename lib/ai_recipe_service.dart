@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:firebase_vertexai/firebase_vertexai.dart';
+import 'package:firebase_ai/firebase_ai.dart';
 import 'package:http/http.dart' as http;
 import 'package:recipe_app/config/env.dart';
 
@@ -70,8 +70,8 @@ class AIRecipeService {
     List<String> previousRecipes = const [],
   }) async {
     try {
-      final model = FirebaseVertexAI.instance.generativeModel(
-        model: 'gemini-2.5-flash',
+      final model = FirebaseAI.googleAI().generativeModel(
+        model: 'gemini-3.8-flash',
         generationConfig: GenerationConfig(
           responseMimeType: 'application/json',
           temperature:

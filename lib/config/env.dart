@@ -2,7 +2,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class Env {
   static String get googleApiKey {
-    final token = dotenv.env['googleApiKey'];
+    final token = dotenv.env['GOOGLE_API_KEY'];
     if (token == null || token.isEmpty) {
       throw Exception("googleApiKey not found");
     }

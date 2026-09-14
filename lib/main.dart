@@ -21,22 +21,25 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'dart:convert';
-import 'package:firebase_vertexai/firebase_vertexai.dart';
+import 'package:firebase_ai/firebase_ai.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'notification_service.dart';
 
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await dotenv.load(fileName: ".env");
-  final token = dotenv.env['googleApiKey'];
+
+  await Firebase.initializeApp();
+
+  await FirebaseAppCheck.instance.activate(
+    androidProvider: AndroidProvider.debug,
+  );
+
   await NotificationService().init();
 
-  if (token == null || token.isEmpty) {
-    throw Exception("googleApiKey not found. Check your .env file.");
-  }
-
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(
     ChangeNotifierProvider(
       create: (context) => PantryProvider(),
@@ -756,8 +759,8 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen>
         "SERBUK KARI AYAM",
       ];
 
-      final model = FirebaseVertexAI.instance.generativeModel(
-        model: 'gemini-2.5-flash',
+      final model = FirebaseAI.googleAI().generativeModel(
+        model: 'gemini-3.8-flash',
         generationConfig: GenerationConfig(
           responseMimeType: 'application/json',
           temperature:

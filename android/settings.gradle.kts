@@ -19,12 +19,9 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    
-    // NOTE: 8.11.1 and 2.2.20 look like typos! 
-    // I changed them to stable versions, but if your project requires different ones, change them back.
-    id("com.android.application") version "8.9.1" apply false 
+    id("com.android.application") version "8.11.1" apply false 
     id("com.google.gms.google-services") version "4.3.15" apply false
-    id("org.jetbrains.kotlin.android") version "2.2.0" apply false 
+    id("org.jetbrains.kotlin.android") version "2.2.20" apply false 
 }
 
 dependencyResolutionManagement {

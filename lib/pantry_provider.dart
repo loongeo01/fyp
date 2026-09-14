@@ -275,9 +275,10 @@ class PantryProvider extends ChangeNotifier {
     notifyListeners();
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'target_prices': _targetPrices,
-      }, SetOptions(merge: true));
+      // Use update() and FieldValue.delete() to explicitly wipe the key from the database
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+        {'target_prices.$item': FieldValue.delete()},
+      );
     }
   }
 
