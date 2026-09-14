@@ -1,17 +1,7 @@
-# recipe_app
+Simple app where you can detect food ingredients, check their prices, and get their recipes. For ingredients saved in the app, you can set expiry dates too. There are also other features not mentioned so take your time exploring them. 
 
-A new Flutter project.
+NOTE: Only working for Kuala Lumpur, Malaysia
 
-## Getting Started
+(DOWNLOAD APK HERE)
+https://github.com/loongeo01/fyp/releases/tag/v1.0.0
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
